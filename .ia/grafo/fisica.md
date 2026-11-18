@@ -74,3 +74,9 @@ Misma interfaz y mismo control externo que el cuadricóptero. Aceleración limit
 `benchmarks/bench_physics.py`: ticks/s con 10 `iris` (modelo + autopiloto, sin mundo). **Objetivo ≥ 24 000 ticks/s** (20 veces el tiempo real). Si no llega con numpy: devolver `BLOQUEO rendimiento` con la cifra y un perfil por función. No añadir numba.
 
 ## Deltas
+N Drones: src/c2lab/physics/drones.py (Opus, tras cortarse A2 por límite de gasto): reset/set_setpoint/step, despegue con motores en vuelo estacionario, contacto con el suelo solo bajando, presupuesto de distancia segura con sdf(max_dist=5)
+N Autopilot: anti-windup condicional en el lazo de velocidad; ganancias iris kp_vel 2.0 ki_vel 1.0, cf2 2.0/0.5
+N Profile:cf2, N Profile:iris (fuentes verificadas); potencia estacionaria 7.1 W / 166 W
+R Drones -> WorldQuery (sdf terrain=False/True con max_dist, ground, bounds)
+A Aceptación: 15/15 tests (criterios 1-10)
+BLOQUEO rendimiento: 3 907 ticks/s quad, 3 600 masa puntual (10 iris) = 3,3x tiempo real; objetivo 24 000. Coste dominado por overhead por llamada numpy (~100 µs/tick). Decisión pendiente: numba / bajar tasa / aceptar
