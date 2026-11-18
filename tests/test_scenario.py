@@ -34,7 +34,8 @@ def test_minimal_defaults():
     assert s["radio"] == {"profile": "dil_v02", "packet_bytes": 64, "ranging": False, "max_packets": 4,
                           "range_m": 100.0, "loss": 0.0}
     assert s["team"][0] == {"name": "a", "count": 2, "brain": "brains.x:X", "brain_params": {}, "role": "nav",
-                            "drone": "iris", "memory_bytes": None, "sensors": {}}
+                            "drone": "iris", "memory_bytes": None, "launch_s": 0.0,
+                            "sensors": {}}
     assert "ground_station" not in s
 
 

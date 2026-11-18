@@ -178,14 +178,81 @@ function panel() {
 addEventListener('dragover', e => e.preventDefault());
 addEventListener('drop', e => { e.preventDefault(); e.dataTransfer.files[0]?.text().then(t => load(JSON.parse(t))); });
 
-let frames = 0, t0 = performance.now();
+// --- replay of a run (python -m c2lab run ... writes replay.json) ----------------------------------------------
+const TEAM_COLORS = [0x4aa8ff, 0xff6a4a, 0x7ad35a, 0xe0c040];
+let run = null, play = true, speed = 1, tNow = 0;
+function loadRun(r) {
+  load(r.world);
+  if (run) scene.remove(run.group);
+  const n = r.teams.length, teams = [...new Set(r.teams)];
+  const group = new THREE.Group();
+  const cone = new THREE.ConeGeometry(0.35, 1.0, 10).rotateZ(-Math.PI / 2);   // apex along body +x
+  const mesh = new THREE.InstancedMesh(cone, new THREE.MeshLambertMaterial(), n);
+  r.teams.forEach((t, i) => mesh.setColorAt(i, new THREE.Color(TEAM_COLORS[teams.indexOf(t) % TEAM_COLORS.length])));
+  group.add(mesh);
+  const trails = [];
+  for (let i = 0; i < n; i++) {
+    const pos = new Float32Array(r.t.length * 3);
+    r.p.forEach((f, k) => pos.set(f.slice(3 * i, 3 * i + 3), 3 * k));
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: TEAM_COLORS[teams.indexOf(r.teams[i])], transparent: true, opacity: 0.5 }));
+    trails.push(line);
+    group.add(line);
+  }
+  scene.add(group);
+  run = { r, mesh, trails, group };
+  tNow = 0;
+  const bar = document.createElement('div');
+  const btn = document.createElement('button'), slider = document.createElement('input'), sp = document.createElement('select');
+  const lbl = document.createElement('span');
+  btn.textContent = 'pause'; btn.onclick = () => { play = !play; btn.textContent = play ? 'pause' : 'play'; };
+  slider.type = 'range'; slider.min = 0; slider.max = r.t.length - 1; slider.value = 0; slider.style.width = '100%';
+  slider.oninput = () => { tNow = r.t[+slider.value]; };
+  for (const s of [0.25, 0.5, 1, 2, 4, 8]) { const o = document.createElement('option'); o.value = s; o.textContent = `${s}x`; if (s === 1) o.selected = true; sp.append(o); }
+  sp.onchange = () => { speed = +sp.value; };
+  bar.append(btn, sp, lbl, slider);
+  panelEl.append(bar);
+  run.ui = { slider, lbl };
+  const m = r.metrics;
+  const info = document.createElement('div');
+  info.style.whiteSpace = 'pre-wrap';
+  info.textContent = `arrival ${(100 * m.arrival_rate).toFixed(0)} %  crashes ${m.crashes}  agents ${m.agents}` +
+    (m.privileged ? '  (privileged)' : '');
+  panelEl.append(info);
+}
+
+function showFrame() {
+  const { r, mesh, trails, ui } = run, n = r.teams.length;
+  let k = r.t.findIndex(t => t > tNow);
+  k = k < 0 ? r.t.length - 1 : Math.max(k - 1, 0);
+  const m = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1), zero = new THREE.Vector3(0, 0, 0);
+  for (let i = 0; i < n; i++) {
+    const p = r.p[k].slice(3 * i, 3 * i + 3), q = r.q[k].slice(4 * i, 4 * i + 4);
+    m.compose(V(p), Q(q), r.alive[k][i] ? one : zero);
+    mesh.setMatrixAt(i, m);
+    trails[i].geometry.setDrawRange(0, k + 1);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  ui.slider.value = k;
+  ui.lbl.textContent = ` t = ${r.t[k].toFixed(1)} s `;
+}
+
+let frames = 0, t0 = performance.now(), last = performance.now();
 renderer.setAnimationLoop(() => {
+  const now = performance.now();
+  if (run) {
+    if (play) tNow = Math.min(tNow + speed * (now - last) / 1000, run.r.t[run.r.t.length - 1]);
+    showFrame();
+  }
+  last = now;
   controls.update();
   renderer.render(scene, camera);
   frames++;
-  const t = performance.now();
-  if (t - t0 >= 500) { fpsEl.textContent = `fps: ${(frames * 1000 / (t - t0)).toFixed(0)}`; frames = 0; t0 = t; }
+  if (now - t0 >= 500) { fpsEl.textContent = `fps: ${(frames * 1000 / (now - t0)).toFixed(0)}`; frames = 0; t0 = now; }
 });
 
-const url = new URLSearchParams(location.search).get('world') || 'sample_world.json';
-fetch(url).then(r => r.json()).then(load).catch(e => { panelEl.textContent = `load error: ${e}`; console.error(e); });
+const params = new URLSearchParams(location.search);
+const src = params.get('run') || params.get('world') || 'sample_world.json';
+fetch(src).then(r => r.json()).then(d => (d.frames || d.t ? loadRun(d) : load(d)))
+  .catch(e => { panelEl.textContent = `load error: ${e}`; console.error(e); });

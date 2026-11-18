@@ -132,7 +132,7 @@ def parse(text: str) -> dict:
     team = []
     for i, t in enumerate(teams):
         p = f"team[{i}]"
-        _table(t, p, {"name", "count", "brain", "brain_params", "role", "drone", "memory_bytes", "sensors"})
+        _table(t, p, {"name", "count", "brain", "brain_params", "role", "drone", "memory_bytes", "sensors", "launch_s"})
         name = _get(t, p, "name", "str", check=bool, why="no puede estar vacío")
         if name in names:
             _err(f"{p}.name", name, "nombre de equipo duplicado")
@@ -144,6 +144,7 @@ def parse(text: str) -> dict:
             "role": _get(t, p, "role", "str", "nav", bool, "no puede estar vacío"),
             "drone": _choice(t, p, "drone", {"cf2", "iris"}, "iris"),
             "memory_bytes": _get(t, p, "memory_bytes", "int", None, lambda v: v >= 0, "debe ser >= 0"),
+            "launch_s": _get(t, p, "launch_s", "num", 0.0, lambda v: v >= 0, "debe ser >= 0"),
             "sensors": _sensors(t.get("sensors", {}), f"{p}.sensors", phys),
         })
 

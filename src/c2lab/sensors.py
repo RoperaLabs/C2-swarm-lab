@@ -9,6 +9,7 @@ from c2lab.brain import Reading
 from c2lab.physics.profiles import G
 from c2lab.physics.quad import quat_to_R
 from c2lab.seeds import rng as stream
+from c2lab.world.primitives import sphere_hits
 
 PHYSICS_HZ = 1200
 MOUNTS = {"front": (0, 0), "left": (90, 0), "back": (180, 0), "right": (-90, 0), "up": (0, 90), "down": (0, -90)}
@@ -136,7 +137,10 @@ class Sensors:
         R = d.model.R if hasattr(d.model, "R") else quat_to_R(d.q)
         dirs = np.matmul(R, flat.T).transpose(0, 2, 1)
         o = np.repeat(d.p, len(flat), 0)
-        dist, _, _ = self.world.raycast(o, dirs.reshape(-1, 3), rng_m)
+        dirs = np.ascontiguousarray(dirs.reshape(-1, 3))
+        dist, _, _ = self.world.raycast(o, dirs, rng_m)
+        owner = np.repeat(np.arange(self.n), len(flat))          # other drones of the team are spheres to the sensor
+        sphere_hits(o, dirs, owner, np.ascontiguousarray(d.p), d.alive, d.prof.radius, dist)
         return dist.reshape((self.n,) + sh)
 
     def _noisy(self, name, dist, sigma, lo, hi, dropout=0.0):

@@ -51,3 +51,64 @@ def coverage(world, res, z_top=None):
     z0 = world.ground(xy) + 0.05
     top = world.bounds[1][2] - 0.05 if z_top is None else z_top
     return float((world.segment_crossings(np.c_[xy, z0], np.c_[xy, np.full(len(xy), top)]) > 0).mean())
+
+
+def shortest_paths(world, starts, b, res, inflate=INFLATE):
+    """Shortest collision-free paths from each start to b (world coordinates) for a drone of radius `inflate`: one
+    Dijkstra from b over the 26-connected free voxels, then each path string-pulled with clearance checks.
+    Returns a list of (waypoints (k, 3), length), (None, inf) where no path exists.
+    ponytail: memory grows with the voxel count; coarsen `res` for the 200 m biomes if it bites."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import dijkstra
+
+    occ = voxelize(world, res, inflate)
+    shape, lo = occ.shape, world.bounds[0]
+    idx = np.full(shape, -1, np.int64)
+    free = ~occ
+    idx[free] = np.arange(free.sum())
+    rows, cols, w = [], [], []
+    for dx, dy, dz in [(x, y, z) for x in (0, 1) for y in (-1, 0, 1) for z in (-1, 0, 1) if (x, y, z) > (0, 0, 0)]:
+        src = [slice(max(0, -d), s - max(0, d)) for d, s in zip((dx, dy, dz), shape)]
+        dst = [slice(max(0, d), s - max(0, -d)) for d, s in zip((dx, dy, dz), shape)]
+        u, v = idx[tuple(src)], idx[tuple(dst)]
+        ok = (u >= 0) & (v >= 0)
+        rows.append(u[ok])
+        cols.append(v[ok])
+        w.append(np.full(ok.sum(), res * math.sqrt(dx * dx + dy * dy + dz * dz)))
+    n = int(free.sum())
+    g = coo_matrix((np.concatenate(w), (np.concatenate(rows), np.concatenate(cols))), shape=(n, n)).tocsr()
+
+    def node(p):
+        return idx[tuple(np.clip(np.floor((np.asarray(p) - lo) / res).astype(int), 0, np.array(shape) - 1))]
+
+    t = node(b)
+    if t < 0:
+        return [(None, math.inf)] * len(starts)
+    dist, pred = dijkstra(g, directed=False, indices=t, return_predecessors=True)
+    centres = np.argwhere(free) * res + lo + res / 2
+
+    def clear(p, q):
+        m = max(int(np.linalg.norm(q - p) / (res / 4)), 2)
+        return world.sdf(p + np.linspace(0, 1, m)[:, None] * (q - p), max_dist=inflate).min() >= inflate - 1e-9
+
+    out = []
+    for a in starts:
+        k = node(a)
+        if k < 0 or not np.isfinite(dist[k]):
+            out.append((None, math.inf))
+            continue
+        chain = []
+        while k >= 0:
+            chain.append(centres[k])
+            k = pred[k]
+        pts = [np.asarray(a, float)] + chain[1:-1] + [np.asarray(b, float)]
+        way, i = [pts[0]], 0
+        while i < len(pts) - 1:
+            j = len(pts) - 1
+            while j > i + 1 and not clear(pts[i], pts[j]):
+                j -= 1
+            way.append(pts[j])
+            i = j
+        way = np.array(way)
+        out.append((way, float(np.linalg.norm(np.diff(way, axis=0), axis=1).sum())))
+    return out

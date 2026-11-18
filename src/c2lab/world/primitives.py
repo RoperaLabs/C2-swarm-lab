@@ -193,3 +193,19 @@ def crossings(T, P, AB, H, g, A, B, out):
                 if t > L:
                     break
         out[k] = c
+
+
+@njit(parallel=True, cache=True)
+def sphere_hits(O, D, owner, C, alive, r, dist):
+    """Lower dist[k] to the first hit of ray k on any live sphere (centre C[j], radius r) other than its owner."""
+    for k in prange(len(O)):
+        for j in range(len(C)):
+            if j == owner[k] or not alive[j]:
+                continue
+            ox, oy, oz = C[j, 0] - O[k, 0], C[j, 1] - O[k, 1], C[j, 2] - O[k, 2]
+            b = D[k, 0] * ox + D[k, 1] * oy + D[k, 2] * oz
+            disc = b * b - (ox * ox + oy * oy + oz * oz) + r * r
+            if disc >= 0.0:
+                t = b - math.sqrt(disc)
+                if 0.0 <= t < dist[k]:
+                    dist[k] = t

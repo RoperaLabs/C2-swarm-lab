@@ -1,0 +1,23 @@
+# Ten iris cross the mixed arena from A to B as boids: six ToF arrays, an all-round detector, EKF pose (F4).
+
+[scenario]
+name = "ab_mixto"
+seed = 0
+duration_s = 120
+mission = "a_to_b"
+
+[world]
+biome = "mixto"
+density = 0.2
+
+[radio]
+profile = "ideal"
+
+[[team]]
+name = "azul"
+count = 10
+brain = "brains.boids:Boids"
+launch_s = 2.0
+sensors.tof = { arrays = ["front", "left", "right", "back", "up", "down"] }
+sensors.pose = { profile = "ekf" }
+sensors.detector = { fov_deg = 360, range_m = 15 }
