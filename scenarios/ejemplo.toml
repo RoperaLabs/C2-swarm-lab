@@ -1,0 +1,29 @@
+# Reference scenario: ten drones cross an urban block from A to B (PLAN.md §2.5).
+
+[scenario]
+name = "ab_urbano_10"
+seed = 7
+duration_s = 180
+mission = "a_to_b"
+rates_hz = { physics = 1200, brain = 10, radio = 10, record = 30 }
+
+[world]
+biome = "urbano"
+size_m = [200, 200, 60]
+density = 0.25
+
+[radio]
+profile = "dil_v02"
+packet_bytes = 64
+ranging = false
+
+[[team]]
+name = "azul"
+count = 10
+drone = "quad450"
+brain = "brains.boids:Boids"
+memory_bytes = 256
+sensors.tof = { arrays = ["front", "left", "right", "down"], zones = 8, fov_deg = 45, range_m = 4.0, hz = 15 }
+sensors.pose = { profile = "vio" }
+sensors.detector = { fov_deg = 90, range_m = 30, hz = 10 }
+sensors.gnss = false
