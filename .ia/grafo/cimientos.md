@@ -39,7 +39,7 @@ Tests (`tests/test_seeds.py`):
 | `team[i].brain` | `"modulo.sub:Clase"` (regex `^[A-Za-z_][\w.]*:[A-Za-z_]\w*$`) | obligatorio |
 | `team[i].brain_params` | tabla | {} |
 | `team[i].role` | str no vacío | "nav" |
-| `team[i].drone` | `cf2` \| `quad450` | `quad450` |
+| `team[i].drone` | `cf2` \| `iris` | `iris` |
 | `team[i].memory_bytes` | int ≥ 0 | None (sin límite) |
 | `team[i].sensors` | tabla nombre → tabla \| bool. Nombres válidos: `tof`, `lidar`, `depth`, `detector`, `pose`, `imu`, `gnss`, `baro`, `mag`, `prior_map`, `battery`. `true` equivale a `{}` y `false` elimina el sensor. Si la tabla trae `hz`, se aplica la regla del periodo entero. El resto de parámetros por sensor se acepta tal cual (los valida F3) | {} |
 | `ground_station.brain` / `.brain_params` | igual que en team; la tabla es opcional | — |

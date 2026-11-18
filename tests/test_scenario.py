@@ -33,7 +33,7 @@ def test_minimal_defaults():
     assert s["world"] == {"biome": "mixto", "size_m": [60, 40, 20], "density": 0.2}
     assert s["radio"] == {"profile": "dil_v02", "packet_bytes": 64, "ranging": False}
     assert s["team"][0] == {"name": "a", "count": 2, "brain": "brains.x:X", "brain_params": {}, "role": "nav",
-                            "drone": "quad450", "memory_bytes": None, "sensors": {}}
+                            "drone": "iris", "memory_bytes": None, "sensors": {}}
     assert "ground_station" not in s
 
 

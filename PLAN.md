@@ -182,7 +182,7 @@ ranging = false
 [[team]]
 name = "azul"
 count = 10
-drone = "quad450"           # perfil de parámetros físicos
+drone = "iris"              # perfil de parámetros físicos
 brain = "brains.boids:Boids"
 memory_bytes = 256
 sensors.tof = { arrays = ["front", "left", "right", "down"], zones = 8, fov_deg = 45, range_m = 4.0, hz = 15 }
@@ -311,7 +311,7 @@ Los cuatro biomas comparten la **geocerca** del recinto: salir de ella cuenta co
 - **Integración:** semi-implícita a 1200 Hz con renormalización del cuaternión. RK4 solo si el test de convergencia lo exige.
 - **Energía:** potencia por rotor según la teoría del momento con un rendimiento η. La batería es opcional.
 - **Colisión:** el dron es una esfera de radio r_d. Choca si SDF(p) < r_d, si dos drones están a menos de 2·r_d o si sale de la geocerca. Por defecto, choque = dron perdido. Posarse en el suelo al despegar o aterrizar no cuenta como choque.
-- **Perfiles de parámetros** (TOML, con la fuente citada): `cf2` (clase Crazyflie, 27 g, misma MCU que el presupuesto de GRACE-3D) y `quad450` (clase 450 mm, unos 1,5 kg). Los valores se toman de la literatura (gym-pybullet-drones, RotorS) en la tarea 2.1.
+- **Perfiles de parámetros** (TOML, con la fuente citada): `cf2` (Crazyflie 2.x, 27 g, misma MCU que el presupuesto de GRACE-3D; parámetros de `cf2x.urdf` de gym-pybullet-drones) e `iris` (3DR Iris, 1,5 kg; parámetros de `iris.sdf` del SITL de PX4). Ambas fuentes verificadas el 2026-11-18.
 - **Masa puntual:** misma interfaz, solo con límites de velocidad y aceleración. Sirve para depurar algoritmos y para la escalera de realismo de F7.
 
 ### Autopiloto (cascada al estilo PX4)
@@ -320,7 +320,7 @@ Posición (50 Hz) → velocidad (PID, 50 Hz) → aceleración deseada → actitu
 
 | # | Tarea | Nivel |
 |---|---|---|
-| 2.1 | Perfiles `cf2` y `quad450` con parámetros documentados y su fuente | H |
+| 2.1 | Perfiles `cf2` e `iris` con parámetros documentados y su fuente | Opus |
 | 2.2 | `quad.py` vectorizado: fuerzas, pares, motores e integración | S |
 | 2.3 | Viento (OU sembrado) y energía | H |
 | 2.4 | `autopilot.py`: cascada, límites y sintonía por perfil | S |
@@ -330,8 +330,8 @@ Posición (50 Hz) → velocidad (PID, 50 Hz) → aceleración deseada → actitu
 
 **Aceptación**
 - Caída libre (motores parados, sin arrastre): |a_z + g| < 10⁻⁹.
-- Vuelo estacionario (`quad450` y `cf2`, estimador ideal, sin viento): deriva < 1 cm en 30 s y motores dentro de sus límites.
-- Escalón de velocidad de 0 a 5 m/s (`quad450`): sobreoscilación ≤ 10 %, subida al 90 % en ≤ 1,5 s, error estacionario ≤ 0,05 m/s y la inclinación nunca supera el máximo.
+- Vuelo estacionario (`iris` y `cf2`, estimador ideal, sin viento): deriva < 1 cm en 30 s y motores dentro de sus límites.
+- Escalón de velocidad de 0 a 5 m/s (`iris`): sobreoscilación ≤ 10 %, subida al 90 % en ≤ 1,5 s, error estacionario ≤ 0,05 m/s y la inclinación nunca supera el máximo.
 - Mantener posición con viento de 5 m/s y ráfagas de σ = 1 m/s: error RMS ≤ 0,5 m.
 - Convergencia: al reducir dt a la mitad, la posición tras una maniobra de 10 s cambia < 1 cm.
 - Colisión a 2 m/s contra un muro: el evento cae en el tick analítico ± 1. Las colisiones entre drones se detectan.
@@ -524,5 +524,5 @@ Render RGB y cerebros de visión por computador · puente ROS 2 o Crazyflie (el 
 ## 7. Preguntas abiertas (no bloquean F0 a F2)
 
 1. ¿Se publica en GitHub (RoperaLabs) desde F0 o al llegar a v0.1.0?
-2. ¿Qué escala y perfil de dron usamos por defecto: exterior (`urbano` con `quad450`) o interior (`interior` con `cf2`)?
+2. ¿Qué escala y perfil de dron usamos por defecto: exterior (`urbano` con `iris`) o interior (`interior` con `cf2`)?
 3. ¿Quieres la nota técnica RL-TR-2026-05 al cerrar v0.3.0?

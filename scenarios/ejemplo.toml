@@ -20,7 +20,7 @@ ranging = false
 [[team]]
 name = "azul"
 count = 10
-drone = "quad450"
+drone = "iris"
 brain = "brains.boids:Boids"
 memory_bytes = 256
 sensors.tof = { arrays = ["front", "left", "right", "down"], zones = 8, fov_deg = 45, range_m = 4.0, hz = 15 }

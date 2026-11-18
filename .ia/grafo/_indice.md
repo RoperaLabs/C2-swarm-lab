@@ -7,8 +7,8 @@ Banco de pruebas 3D para algoritmos C2 de enjambres de drones. Plan completo: `P
 | clúster | fase | archivo de spec | estado |
 |---|---|---|---|
 | cimientos | F0 | .ia/grafo/cimientos.md | hecho |
-| mundo | F1 | .ia/grafo/mundo.md | pendiente |
-| fisica | F2 | .ia/grafo/fisica.md | pendiente |
+| mundo | F1 | .ia/grafo/mundo.md | en curso |
+| fisica | F2 | .ia/grafo/fisica.md | en curso |
 | sensores | F3 | .ia/grafo/sensores.md | pendiente |
 | cerebros | F4 | .ia/grafo/cerebros.md | pendiente |
 | misiones | F5 | .ia/grafo/misiones.md | pendiente |
@@ -29,19 +29,32 @@ Tipos `AgentSpec`, `Reading`, `Packet`, `Observation`, `Velocity`, `Position`, `
 `load(path) -> dict` y `parse(text) -> dict` validan y rellenan valores por defecto. Cualquier error lanza `ScenarioError` (subclase de `ValueError`) con un mensaje que nombra la clave completa y el valor, p. ej. `scenario.rates_hz.brain = 7: 1200 Hz de física no da un periodo entero de ticks`. Esquema: `.ia/grafo/cimientos.md`.
 
 ### `WorldQuery`: `src/c2lab/world/` (lo implementa F1; F2 y F3 programan contra estas firmas)
-Todos los arrays son float64, en metros y ENU.
-- `World.sdf(p: (N,3)) -> (N,)`: distancia con signo a la superficie más cercana (negativa dentro). Incluye suelo o terreno y excluye la geocerca.
-- `World.raycast(o: (N,3), d: (N,3) unitarios, max_range: float | (N,)) -> (dist (N,), prim (N,) int, normal (N,3))`. Sin impacto dentro del alcance: `dist = inf`, `prim = -1`, `normal = 0`. Origen dentro de un obstáculo: `dist = 0`.
-- `World.segment_crossings(a: (N,3), b: (N,3)) -> (N,) int`: número de primitivas que corta cada segmento. Es la línea de vista de la radio y del detector (0 = visible).
-- `World.bounds -> (lo (3,), hi (3,))`: la geocerca.
-- `World.to_dict()`, `World.from_dict(d)`, `World.hash -> str` (sha256 del JSON canónico).
+`from c2lab.world import World, generate`. Todos los arrays son float64, en metros y ENU.
+- `World.sdf(p (N,3), terrain=True, max_dist=inf) -> (N,)`: distancia con signo (negativa dentro), recortada a `max_dist`, de modo que un punto sin nada más cerca devuelve `max_dist`. `terrain=False` ignora el terreno. Es exacta para las primitivas; para el terreno es una cota inferior de |d| con el signo correcto. Excluye la geocerca.
+- `World.ground(xy (N,2)) -> (N,)`: altura del terreno (bilineal).
+- `World.raycast(o (N,3), d (N,3) unitarios, max_range float | (N,)) -> (dist (N,), prim (N,) int, normal (N,3))`: primer impacto. Sin impacto: `inf`, `-1`, `0`. Terreno: `prim = World.TERRAIN` (−2). Origen dentro de un obstáculo: `dist = 0` y `normal = 0`.
+- `World.segment_crossings(a (N,3), b (N,3)) -> (N,) int`: número de primitivas que toca cada segmento, +1 si pasa bajo el terreno. Es la línea de vista de la radio y del detector (0 = visible).
+- `World.bounds -> (lo (3,), hi (3,))` (geocerca), `World.anchors -> dict` (`{"A": (x,y,z), "B": (x,y,z)}`, en el suelo) y `World.tags -> list[str]` (una por primitiva).
+- `World.to_dict()`, `World.from_dict(d)` y `World.hash -> str` (sha256 del JSON canónico).
+- `generate(biome, size_m, density, seed) -> World`.
 
-### `TrueState`: lo produce la física (F2) y lo consumen los sensores y las misiones (F3, F5)
-Arrays sobre N drones: `p (N,3)` ENU m, `v (N,3)` m/s, `q (N,4)` wxyz de cuerpo a mundo, `w (N,3)` rad/s en cuerpo, `f (N,3)` fuerza específica en cuerpo (lo que mide un acelerómetro), `alive (N,)` bool.
+### Formato `c2lab-world/1` (JSON; lo leen el visor y el hash)
+```
+{"format": "c2lab-world/1", "biome": str, "seed": int, "density": float,
+ "bounds": [[0,0,0], [sx,sy,sz]], "anchors": {"A": [x,y,z], "B": [x,y,z]},
+ "terrain": {"heights": [[...], ...]},          # nx × ny ≥ 2 × 2 nodos que cubren bounds en xy; plano = [[0,0],[0,0]]
+ "primitives": [{"type": ..., "tag": str, ...}]}
+box {c, h, q} · cylinder {c, r, hh, q} · capsule {a, b, r} · sphere {c, r} · cone {c, r, h, q} · torus {c, R, r, arc, q}
+```
+`q` es un cuaternión wxyz de local a mundo. Las convenciones de cada tipo están en `.ia/grafo/mundo.md`. Valores redondeados a 6 decimales.
+
+### `TrueState` y `Physics`: `src/c2lab/physics/` (F2); lo consumen los sensores y las misiones (F3, F5)
+`Drones(profile, n, rng, world, mode="quad"|"pointmass", wind, gust_sigma, gust_tau, dt)`. Atributos sobre n drones: `p (n,3)` ENU m, `v (n,3)` m/s, `q (n,4)` wxyz de cuerpo a mundo, `w (n,3)` rad/s en cuerpo, `f (n,3)` fuerza específica en cuerpo (lo que mide un acelerómetro), `alive (n,)`, `landed (n,)`, `omega (n,4)` rad/s y `energy (n,)` J.
+Métodos: `reset(p0, yaw0, landed=True)`, `set_setpoint(i, Velocity | Position | None)` y `step(tick, est=None) -> [(tick, i, kind)]`. `est` es el estado estimado que usa el autopiloto; `None` significa ideal. Los eventos `kind` son `takeoff`, `landed`, `crash_obstacle`, `crash_terrain`, `crash_drone` y `geofence`. `PROFILES = {"cf2", "iris"}`. Detalle en `.ia/grafo/fisica.md`.
 
 ## Archivos y reglas para agentes
 
 - Escribir solo los archivos permitidos en el spec del clúster. `src/c2lab/brain.py`, `pyproject.toml`, `CLAUDE.md` y este índice son de solo lectura.
-- No añadir dependencias. numpy es la única de ejecución; pytest, la de tests.
+- No añadir dependencias. De ejecución: numpy y scipy; de tests: pytest.
 - Check común: `.venv/Scripts/python -m pytest -q` desde la raíz, en verde.
 - Deltas: añadir líneas al final de la sección `## Deltas` del clúster con el formato `N <nodo>` (nuevo), `R <a> -> <b>: <relación>` (arista nueva), `A <nodo>: <cambio>` (actualizado) y `X <nodo>` (eliminado).

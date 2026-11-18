@@ -139,7 +139,7 @@ def parse(text: str) -> dict:
             "count": _get(t, p, "count", "int", check=lambda v: v >= 1, why="debe ser >= 1"),
             **_brain(t, p),
             "role": _get(t, p, "role", "str", "nav", bool, "no puede estar vacío"),
-            "drone": _choice(t, p, "drone", {"cf2", "quad450"}, "quad450"),
+            "drone": _choice(t, p, "drone", {"cf2", "iris"}, "iris"),
             "memory_bytes": _get(t, p, "memory_bytes", "int", None, lambda v: v >= 0, "debe ser >= 0"),
             "sensors": _sensors(t.get("sensors", {}), f"{p}.sensors", phys),
         })
