@@ -118,10 +118,13 @@ def parse(text: str) -> dict:
     world = {"biome": biome, "size_m": list(size),
              "density": _get(w, "world", "density", "num", 0.2, lambda v: 0 < v < 1, "debe cumplir 0 < x < 1")}
 
-    ra = _table(raw.get("radio", {}), "radio", {"profile", "packet_bytes", "ranging"})
+    ra = _table(raw.get("radio", {}), "radio", {"profile", "packet_bytes", "ranging", "max_packets", "range_m", "loss"})
     radio = {"profile": _choice(ra, "radio", "profile", {"ideal", "disco", "dil_v02"}, "dil_v02"),
              "packet_bytes": _get(ra, "radio", "packet_bytes", "int", 64, lambda v: v >= 1, "debe ser >= 1"),
-             "ranging": _get(ra, "radio", "ranging", "bool", False)}
+             "ranging": _get(ra, "radio", "ranging", "bool", False),
+             "max_packets": _get(ra, "radio", "max_packets", "int", 4, lambda v: v >= 1, "debe ser >= 1"),
+             "range_m": _get(ra, "radio", "range_m", "num", 100.0, _pos, "debe ser > 0"),
+             "loss": _get(ra, "radio", "loss", "num", 0.0, lambda v: 0 <= v < 1, "debe cumplir 0 <= x < 1")}
 
     teams, names = raw["team"], set()
     if not isinstance(teams, list) or not teams:

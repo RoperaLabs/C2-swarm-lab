@@ -9,7 +9,7 @@ Banco de pruebas 3D para algoritmos C2 de enjambres de drones. Plan completo: `P
 | cimientos | F0 | .ia/grafo/cimientos.md | hecho |
 | mundo | F1 | .ia/grafo/mundo.md | hecho |
 | fisica | F2 | .ia/grafo/fisica.md | hecho |
-| sensores | F3 | .ia/grafo/sensores.md | pendiente |
+| sensores | F3 | .ia/grafo/sensores.md | hecho |
 | cerebros | F4 | .ia/grafo/cerebros.md | pendiente |
 | misiones | F5 | .ia/grafo/misiones.md | pendiente |
 | lotes-visor | F6 | .ia/grafo/lotes-visor.md | pendiente |
@@ -50,7 +50,7 @@ box {c, h, q} · cylinder {c, r, hh, q} · capsule {a, b, r} · sphere {c, r} ·
 
 ### `TrueState` y `Physics`: `src/c2lab/physics/` (F2); lo consumen los sensores y las misiones (F3, F5)
 `Drones(profile, n, rng, world, mode="quad"|"pointmass", wind, gust_sigma, gust_tau, dt)`. Atributos sobre n drones: `p (n,3)` ENU m, `v (n,3)` m/s, `q (n,4)` wxyz de cuerpo a mundo, `w (n,3)` rad/s en cuerpo, `f (n,3)` fuerza específica en cuerpo (lo que mide un acelerómetro), `alive (n,)`, `landed (n,)`, `omega (n,4)` rad/s y `energy (n,)` J.
-Métodos: `reset(p0, yaw0, landed=True)`, `set_setpoint(i, Velocity | Position | None)` y `step(tick, est=None) -> [(tick, i, kind)]`. `est` es el estado estimado que usa el autopiloto; `None` significa ideal. Los eventos `kind` son `takeoff`, `landed`, `crash_obstacle`, `crash_terrain`, `crash_drone` y `geofence`. `PROFILES = {"cf2", "iris"}`. Detalle en `.ia/grafo/fisica.md`.
+Métodos: `reset(p0, yaw0, landed=True)`, `set_setpoint(i, Velocity | Position | None)` y `step(tick, err=None) -> [(tick, i, kind)]`. `err` son los errores del estimador (`Sensors.err`) que ve el autopiloto; `None` significa ideal. Los eventos `kind` son `takeoff`, `landed`, `crash_obstacle`, `crash_terrain`, `crash_drone` y `geofence`. `PROFILES = {"cf2", "iris"}`. Detalle en `.ia/grafo/fisica.md`.
 
 ## Archivos y reglas para agentes
 
@@ -58,3 +58,14 @@ Métodos: `reset(p0, yaw0, landed=True)`, `set_setpoint(i, Velocity | Position |
 - No añadir dependencias. De ejecución: numpy, scipy y numba (núcleos calientes); de tests: pytest.
 - Check común: `.venv/Scripts/python -m pytest -q` desde la raíz, en verde.
 - Deltas: añadir líneas al final de la sección `## Deltas` del clúster con el formato `N <nodo>` (nuevo), `R <a> -> <b>: <relación>` (arista nueva), `A <nodo>: <cambio>` (actualizado) y `X <nodo>` (eliminado).
+
+### `Sensors`: `src/c2lab/sensors.py` (F3)
+`Sensors(cfg, n, seed, ids, world, drones, labels, home)`. `cfg` es la tabla `sensors` del equipo (ya validada). `ids` son los agent_id (para las semillas `("agent", id, sensor)`), `labels` el índice de equipo por dron (para el detector) y `home (n,3)` el punto de despegue (origen del marco local).
+- `step(tick)`: muestrea los sensores cuyo periodo divide el tick y actualiza `est`.
+- `pop(i) -> dict[sensor, tuple[Reading, ...]]`: lecturas del dron i desde la última llamada (arrays de solo lectura).
+- `err`: errores del estimador `pose` (`dp (n,3)`, `dv (n,3)`, `dyaw (n,)`, vistas que se actualizan a la tasa de `pose`), o `None` si es ideal o está apagado. Se pasa a `Drones.step` y lo usa el autopiloto.
+- `public(name) -> dict`: parámetros públicos para `AgentSpec.sensors`.
+Formato de `Reading.data`: `tof (arrays, z, z)` m, NaN sin blanco · `lidar (canales, n_az)` m · `depth (H, W)` profundidad z m · `detector (k, 5)` filas (azimut, elevación, distancia, clase 0 = mismo equipo / 1 = otro, confianza) en cuerpo · `pose (13,)` p_local, v_local, q, w · `imu (6,)` f, w en cuerpo · `gnss (6,)` p, v ENU (NaN sin fix) · `baro ()` altura sobre el despegue · `mag ()` guiñada rad · `prior_map (nx, ny)` alturas 2,5D (solo en el tick 0) · `battery ()` estado de carga 0..1.
+
+### `Radio`: `src/c2lab/radio.py` (F3)
+`Radio(cfg, n, rng, world, slot_dt, gains_db=None)`. `send(i, outbox)` encola paquetes; los que superan `packet_bytes`, o pasan de `max_packets` por ranura, se descartan y se cuentan en `dropped`. `slot(p, alive) -> list[list[Packet]]` entrega lo encolado en la ranura anterior: latencia de 1 ranura, en orden de emisor. Perfiles `ideal`, `disco` (`range_m`, `loss`) y `dil_v02` (port de swarm-dil v0.2 con línea de vista 3D `segment_crossings`). `ranging` añade `range_m` con σ 0,1 m. Contadores: `sent`, `delivered` y `dropped` en bytes por nodo.

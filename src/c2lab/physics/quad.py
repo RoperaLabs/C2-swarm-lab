@@ -37,18 +37,25 @@ def mixer(prof):
 
 
 @njit(cache=True)
-def _tick(S, AP, E, use_est, do_att, prm):
-    """One tick for every drone. S: model state (see `Quad`), AP: autopilot inner state, E: estimated R (9) and w (3),
+def _tick(S, AP, DY, use_est, do_att, prm):
+    """One tick for every drone. S: model state (see `Quad`), AP: autopilot inner state, DY: estimator yaw error,
     prm: packed parameters (see `Quad.bind`). Returns True when some drone needs the full contact check."""
     n = len(S)
     kp_att, w2max, kf, mass, a_up, a_dn, dt, e_k, radius = (prm[0], prm[1], prm[2], prm[3], prm[4], prm[5], prm[6],
                                                            prm[7], prm[8])
     need = False
+    eR = np.empty(9)
     for i in range(n):
         if S[i, 32] == 0.0:
             continue
-        eR = E[i, 0:9] if use_est else S[i, 13:22]
-        ew = E[i, 9:12] if use_est else S[i, 6:9]
+        if use_est:     # estimated attitude = yaw error applied to the true one
+            c, s = math.cos(DY[i]), math.sin(DY[i])
+            for b in range(3):
+                eR[b], eR[3 + b], eR[6 + b] = (c * S[i, 13 + b] - s * S[i, 16 + b], s * S[i, 13 + b] + c * S[i, 16 + b],
+                                               S[i, 19 + b])
+        else:
+            eR[:] = S[i, 13:22]
+        ew = S[i, 6:9]
         if do_att:      # attitude loop: Re = Rd^T R, rates from vee(Re - Re^T) / 2, collective thrust
             re = np.zeros(9)
             for a in range(3):
@@ -177,10 +184,10 @@ class Quad:
                           ap.kpj, ap.kij, ap.ij_max, ap.w_max, self._inv_j, self._gyro, self._cd, lo, hi,
                           ap.ainv.ravel(), self.A.ravel()]
         self._ap = ap
-        self._noest = np.zeros((1, 12))
+        self._noyaw = np.zeros(1)
 
-    def tick(self, E, do_att):
-        """One tick; E (n, 12) = estimated R (row-major) and w, or None for the true state."""
+    def tick(self, dyaw, do_att):
+        """One tick; dyaw (n,) = estimator yaw error, or None for the true attitude."""
         if self._ou is not None:
             a, b = self._ou
             self._gust *= a
@@ -189,4 +196,4 @@ class Quad:
             if self._ni == _BLOCK:
                 self._noise, self._ni = self.rng.standard_normal((_BLOCK, self.n, 3)), 0
             np.add(self._wind0, self._gust, out=self.wind)
-        return _tick(self.S, self._ap.AP, self._noest if E is None else E, E is not None, do_att, self._prm)
+        return _tick(self.S, self._ap.AP, self._noyaw if dyaw is None else dyaw, dyaw is not None, do_att, self._prm)

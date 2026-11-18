@@ -29,7 +29,7 @@ class Drones:
         self._k_pos, self._k_att = round(1 / (50 * dt)), round(1 / (600 * dt))
         self.alive, self.landed = np.ones(n, bool), np.zeros(n, bool)
         self._budget = self.model.budget if mode == "quad" else np.full(n, -1.0)
-        self._est_p = np.zeros((n, 3))
+        self._err = None
         self._lo, self._hi = (np.asarray(b, float) for b in world.bounds)
         if mode == "quad":
             self.model.bind(self.ap, self._lo, self._hi)
@@ -52,7 +52,6 @@ class Drones:
         self.ap.arm(idx, yaw0)
         self.ap.mode_vel[:], self.ap.p_tgt[:], self.ap.yaw_sp[:], self.ap.yaw_rate[:] = False, p0, yaw0, 0.0
         self.alive[:], self.landed[:] = True, landed
-        self._est_p[:] = p0
         self._budget[:] = -1.0
         if landed:
             self.model.freeze(idx, True)
@@ -65,7 +64,7 @@ class Drones:
             ap.mode_vel[i], ap.v_cmd[i], ap.body[i], ap.yaw_rate[i] = True, sp.v, sp.frame == "body", sp.yaw_rate
         else:
             ap.mode_vel[i] = False
-            ap.p_tgt[i] = self._est_p[i] + (sp.dp if isinstance(sp, Position) else 0.0)
+            ap.p_tgt[i] = self._est_p()[i] + (sp.dp if isinstance(sp, Position) else 0.0)
             if isinstance(sp, Position) and sp.yaw is not None:
                 ap.yaw_sp[i] = sp.yaw
 
@@ -82,33 +81,33 @@ class Drones:
             self.alive[idx] = False
         self._sync_active()
 
-    def step(self, tick, est=None):
-        """Advance one tick; est (attributes p, v, q, w) feeds the autopilot, None = true state."""
-        m, ap, events = self.model, self.ap, []
-        if est is None:
-            ep, ev, ew = m.p, m.v, m.w
-            eR = m.R if self.mode == "quad" else quat_to_R(m.q)
-        else:
-            ep, ev, ew, eR = est.p, est.v, est.w, quat_to_R(est.q)
-        self._est_p[:] = ep
+    def _est_p(self):
+        return self.model.p if self._err is None else self.model.p + self._err.dp
 
+    def _est_yaw(self):
+        y = _yaw(self.model.R if self.mode == "quad" else quat_to_R(self.model.q))
+        return y if self._err is None else y + self._err.dyaw
+
+    def step(self, tick, err=None):
+        """Advance one tick. err (attributes dp, dv, dyaw: the estimator's errors) feeds the autopilot; None = ideal."""
+        m, ap, events = self.model, self.ap, []
+        self._err = err
         if self.landed.any():
-            climb = np.where(ap.mode_vel, ap.v_cmd[:, 2], ap.p_tgt[:, 2] - ep[:, 2]) > _CLIMB
+            climb = np.where(ap.mode_vel, ap.v_cmd[:, 2], ap.p_tgt[:, 2] - self._est_p()[:, 2]) > _CLIMB
             up = np.flatnonzero(self.landed & self.alive & climb)
             if up.size:
                 self.landed[up] = False
                 m.f_rest[up] = 0.0
                 m.omega[up] = self.prof.hover_omega         # motors spooled up on arming
-                ap.arm(up, _yaw(eR[up]))
+                ap.arm(up, self._est_yaw()[up])
                 self._budget[up] = -1.0
                 self._sync_active()
                 events += [(tick, int(i), "takeoff") for i in up]
 
         if tick % self._k_pos == 0:
-            ap.outer(ep, ev, _yaw(eR))
+            ap.outer(self._est_p(), m.v if err is None else m.v + err.dv, self._est_yaw())
         if self.mode == "quad":
-            E = None if est is None else np.c_[eR.reshape(-1, 9), ew]
-            need = m.tick(E, tick % self._k_att == 0)
+            need = m.tick(None if err is None else err.dyaw, tick % self._k_att == 0)
         else:
             m.step(ap.a_des, ap.yaw_sp)
             self._budget -= np.linalg.norm(m.v, axis=1) * self.dt
