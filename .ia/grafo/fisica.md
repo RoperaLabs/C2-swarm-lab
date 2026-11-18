@@ -83,3 +83,4 @@ BLOQUEO rendimiento: 3 907 ticks/s quad, 3 600 masa puntual (10 iris) = 3,3x tie
 A Drones/Quad (Opus, numba aprobado): un kernel _tick compilado por tick (actitud cuando toca, lazo de velocidad angular, motores, fuerzas, integración, cribado de colisiones); estado empaquetado en Quad.S (n, 38) y Autopilot.AP (n, 22), atributos = vistas
 A Corregido signo del término giroscópico (antes +w×Jw)
 X BLOQUEO rendimiento: resuelto. quad 49 156 ticks/s = 41x tiempo real (10 iris, tras calentar numba). Masa puntual sigue en numpy: 4 386 ticks/s (3,7x); portar a numba si la escalera de F7 lo necesita
+A Integración: tests/test_physics.py::test_real_world_contacts, Drones contra un World real (despegue, choque con muro, paso libre al lado)

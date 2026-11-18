@@ -172,3 +172,22 @@ def test_point_mass_limits():
     a = np.linalg.norm(np.diff(v[:, :2], axis=0), axis=1) / d.dt
     assert a.max() <= G * np.tan(prof.tilt_max) + 1e-6
     assert abs(v[-1, 0] - prof.vmax_xy) < 1e-6
+
+
+def test_real_world_contacts():
+    from c2lab.world import World
+    w = World.from_dict({"biome": "t", "seed": 0, "density": 0.0, "bounds": [[0, 0, 0], [60, 40, 20]],
+                         "anchors": {"A": [5, 20, 0], "B": [55, 20, 0]}, "terrain": {"heights": [[0, 0], [0, 0]]},
+                         "primitives": [{"type": "box", "tag": "wall", "c": [30, 20, 5], "h": [0.3, 10, 5],
+                                         "q": [1, 0, 0, 0]}]})
+    d = Drones("iris", 2, np.random.default_rng(0), w)
+    d.reset(np.array([[5.0, 20.0, 0.0], [5.0, 5.0, 0.0]]), np.zeros(2), landed=True)
+    d.set_setpoint(0, Velocity((0.0, 0.0, 1.0)))
+    d.set_setpoint(1, Velocity((0.0, 0.0, 1.0)))
+    ev, t = run(d, 4)
+    d.set_setpoint(0, Velocity((3.0, 0.0, 0.0)))     # into the wall
+    d.set_setpoint(1, Velocity((3.0, 0.0, 0.0)))     # passes beside it (wall spans y 10..30)
+    ev2, _ = run(d, 15, t0=t)
+    assert sorted(e[2] for e in ev) == ["takeoff", "takeoff"]
+    assert [(e[1], e[2]) for e in ev2] == [(0, "crash_obstacle")]
+    assert d.p[0, 0] < 30 - 0.3 and d.alive[1] and d.p[1, 0] > 40
