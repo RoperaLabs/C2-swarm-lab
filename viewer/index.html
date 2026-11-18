@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>c2lab world viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1e24; font: 12px monospace; color: #ddd; }
+  canvas { display: block; }
+  #panel { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.6); padding: 8px; max-width: 260px; max-height: 90%; overflow: auto; }
+  #panel label { display: block; }
+</style>
+</head>
+<body>
+<div id="panel"></div>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -73,3 +73,6 @@ Aceptación:
   - densidades {0,1; 0,2; 0,35} × 20 semillas → cobertura media dentro de ± 15 % relativo de la objetivo.
 
 ## Deltas
+
+N Viewer: `viewer/` (index.html, main.js, sample_world.json), three.js r170 vendorizado
+R Viewer -> WorldFile(c2lab-world/1): lee el JSON; torus con extremos planos (sin redondear), capsula = cilindro + 2 esferas instanciadas
