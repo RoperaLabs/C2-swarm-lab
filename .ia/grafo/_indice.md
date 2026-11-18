@@ -7,8 +7,8 @@ Banco de pruebas 3D para algoritmos C2 de enjambres de drones. Plan completo: `P
 | clúster | fase | archivo de spec | estado |
 |---|---|---|---|
 | cimientos | F0 | .ia/grafo/cimientos.md | hecho |
-| mundo | F1 | .ia/grafo/mundo.md | en curso |
-| fisica | F2 | .ia/grafo/fisica.md | en curso |
+| mundo | F1 | .ia/grafo/mundo.md | hecho |
+| fisica | F2 | .ia/grafo/fisica.md | hecho |
 | sensores | F3 | .ia/grafo/sensores.md | pendiente |
 | cerebros | F4 | .ia/grafo/cerebros.md | pendiente |
 | misiones | F5 | .ia/grafo/misiones.md | pendiente |

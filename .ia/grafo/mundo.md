@@ -80,3 +80,9 @@ N World: src/c2lab/world/world.py (Opus, tras cortarse A1 por límite de gasto):
 N Primitive:box/cylinder/capsule/sphere/cone/torus + terreno: src/c2lab/world/primitives.py, kernels numba (prange); rayos y segmentos por trazado de esferas sobre SDF exactas
 R World -> numba (dependencia aprobada 2026-11-18)
 A Aceptación T1.1-T1.4: 25 tests; benchmark 2 015 030 rayos/s (objetivo 300 000), sdf(10 pts, max_dist 2) 24 µs/llamada; usa todos los hilos: en barridos fijar NUMBA_NUM_THREADS por proceso
+N Biome:mixto/urbano/bosque/interior: src/c2lab/world/biomes.py (Opus); density = cobertura en planta; urbano árboles antes que edificios; interior con estanterías dobles entre líneas de columnas y tabiques sobre ellas (2 puertas)
+N Oracle: src/c2lab/world/oracle.py voxelize/feasible (scipy.ndimage.label 26-conexo)/coverage
+N WorldCLI: python -m c2lab.world <bioma> --seed N --density D --out runs/worlds/...
+R generate -> SeedTree (rng(seed, "world", intento)), R generate -> Oracle
+A Validación (benchmarks/validate_biomes.py, 5 procesos, 1 m 20 s): 200/200 viables y 200 hashes distintos en los 4 biomas; intentos medios 1,0 (interior 1,9, máx 7); tiempo medio 0,10-0,39 s; cobertura ±15 % en 0,1/0,2/0,35 salvo interior 0,35 → 0,255 (capacidad física con pasillos de 2,5-3,5 m)
+A Visor comprobado con los 4 biomas (Opus, navegador)
