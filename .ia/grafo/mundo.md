@@ -76,3 +76,7 @@ Aceptación:
 
 N Viewer: `viewer/` (index.html, main.js, sample_world.json), three.js r170 vendorizado
 R Viewer -> WorldFile(c2lab-world/1): lee el JSON; torus con extremos planos (sin redondear), capsula = cilindro + 2 esferas instanciadas
+N World: src/c2lab/world/world.py (Opus, tras cortarse A1 por límite de gasto): from_dict/to_dict/hash, sdf con rejilla de 4 m para max_dist, ground, raycast, segment_crossings
+N Primitive:box/cylinder/capsule/sphere/cone/torus + terreno: src/c2lab/world/primitives.py, kernels numba (prange); rayos y segmentos por trazado de esferas sobre SDF exactas
+R World -> numba (dependencia aprobada 2026-11-18)
+A Aceptación T1.1-T1.4: 25 tests; benchmark 2 015 030 rayos/s (objetivo 300 000), sdf(10 pts, max_dist 2) 24 µs/llamada; usa todos los hilos: en barridos fijar NUMBA_NUM_THREADS por proceso

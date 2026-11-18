@@ -55,6 +55,6 @@ Métodos: `reset(p0, yaw0, landed=True)`, `set_setpoint(i, Velocity | Position |
 ## Archivos y reglas para agentes
 
 - Escribir solo los archivos permitidos en el spec del clúster. `src/c2lab/brain.py`, `pyproject.toml`, `CLAUDE.md` y este índice son de solo lectura.
-- No añadir dependencias. De ejecución: numpy y scipy; de tests: pytest.
+- No añadir dependencias. De ejecución: numpy, scipy y numba (núcleos calientes); de tests: pytest.
 - Check común: `.venv/Scripts/python -m pytest -q` desde la raíz, en verde.
 - Deltas: añadir líneas al final de la sección `## Deltas` del clúster con el formato `N <nodo>` (nuevo), `R <a> -> <b>: <relación>` (arista nueva), `A <nodo>: <cambio>` (actualizado) y `X <nodo>` (eliminado).
