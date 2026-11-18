@@ -80,3 +80,6 @@ N Profile:cf2, N Profile:iris (fuentes verificadas); potencia estacionaria 7.1 W
 R Drones -> WorldQuery (sdf terrain=False/True con max_dist, ground, bounds)
 A Aceptación: 15/15 tests (criterios 1-10)
 BLOQUEO rendimiento: 3 907 ticks/s quad, 3 600 masa puntual (10 iris) = 3,3x tiempo real; objetivo 24 000. Coste dominado por overhead por llamada numpy (~100 µs/tick). Decisión pendiente: numba / bajar tasa / aceptar
+A Drones/Quad (Opus, numba aprobado): un kernel _tick compilado por tick (actitud cuando toca, lazo de velocidad angular, motores, fuerzas, integración, cribado de colisiones); estado empaquetado en Quad.S (n, 38) y Autopilot.AP (n, 22), atributos = vistas
+A Corregido signo del término giroscópico (antes +w×Jw)
+X BLOQUEO rendimiento: resuelto. quad 49 156 ticks/s = 41x tiempo real (10 iris, tras calentar numba). Masa puntual sigue en numpy: 4 386 ticks/s (3,7x); portar a numba si la escalera de F7 lo necesita

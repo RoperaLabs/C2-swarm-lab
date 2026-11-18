@@ -28,9 +28,11 @@ class Drones:
         self.ap = Autopilot(self.prof, n, dt)
         self._k_pos, self._k_att = round(1 / (50 * dt)), round(1 / (600 * dt))
         self.alive, self.landed = np.ones(n, bool), np.zeros(n, bool)
-        self._budget = np.full(n, -1.0)
+        self._budget = self.model.budget if mode == "quad" else np.full(n, -1.0)
         self._est_p = np.zeros((n, 3))
         self._lo, self._hi = (np.asarray(b, float) for b in world.bounds)
+        if mode == "quad":
+            self.model.bind(self.ap, self._lo, self._hi)
 
     p = property(lambda s: s.model.p)
     v = property(lambda s: s.model.v)
@@ -105,15 +107,16 @@ class Drones:
         if tick % self._k_pos == 0:
             ap.outer(ep, ev, _yaw(eR))
         if self.mode == "quad":
-            if tick % self._k_att == 0:
-                ap.attitude(eR)
-            m.step(ap.rates(ew))
+            E = None if est is None else np.c_[eR.reshape(-1, 9), ew]
+            need = m.tick(E, tick % self._k_att == 0)
         else:
             m.step(ap.a_des, ap.yaw_sp)
-
-        fly = np.flatnonzero(self.alive & ~self.landed)
-        if fly.size:
-            events += self._contacts(tick, fly)
+            self._budget -= np.linalg.norm(m.v, axis=1) * self.dt
+            need = True
+        if need:
+            fly = np.flatnonzero(self.alive & ~self.landed)
+            if fly.size:
+                events += self._contacts(tick, fly)
         return events
 
     def _contacts(self, tick, fly):
@@ -125,7 +128,6 @@ class Drones:
             events += [(tick, int(i), "geofence") for i in out]
             fly = np.setdiff1d(fly, out)
 
-        self._budget[fly] -= np.linalg.norm(m.v[fly], axis=1) * self.dt
         chk = fly[self._budget[fly] <= 0]
         if chk.size:
             pc = p[chk]

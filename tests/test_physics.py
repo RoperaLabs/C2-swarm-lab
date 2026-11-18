@@ -6,6 +6,7 @@ import pytest
 from c2lab.brain import Velocity
 from c2lab.physics import PROFILES, Drones
 from c2lab.physics.profiles import G
+from c2lab.physics.autopilot import Autopilot
 from c2lab.physics.quad import Quad
 
 BOX_C, BOX_H = np.array([20.0, 0.0, 5.0]), np.array([1.0, 5.0, 5.0])
@@ -43,10 +44,12 @@ def run(d, seconds, t0=0, record=None):
 
 def test_free_fall():
     prof = dataclasses.replace(PROFILES["iris"], c_xy=0.0, c_z=0.0)
-    m = Quad(prof, 1, np.random.default_rng(0), (0, 0, 0), 0.0, 2.0, 1 / 1200)
+    m, ap = Quad(prof, 1, np.random.default_rng(0), (0, 0, 0), 0.0, 2.0, 1 / 1200), Autopilot(prof, 1, 1 / 1200)
+    ap.kpj[:] = ap.kij[:] = 0.0                       # zero wrench -> motors stay stopped
+    m.bind(ap, np.full(3, -1e9), np.full(3, 1e9))
     m.reset(np.array([[0.0, 0.0, 100.0]]), np.zeros(1), 0.0)
     for _ in range(1200):
-        m.step(np.zeros((1, 4)))
+        m.tick(None, False)
     assert abs(m.v[0, 2] + G * 1.0) < 1e-9
     assert np.abs(m.f).max() < 1e-9
 

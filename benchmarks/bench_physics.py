@@ -22,9 +22,11 @@ for mode in ("quad", "pointmass"):
     d.reset(np.c_[np.arange(10) * 5.0, np.zeros(10), np.full(10, 50.0)], np.zeros(10), landed=False)
     for i in range(10):
         d.set_setpoint(i, Velocity((4.0, 1.0, 0.0)))
+    for k in range(1200):                       # warm-up: numba compiles on the first calls
+        d.step(k)
     n = 24000
     t = time.perf_counter()
-    for k in range(n):
+    for k in range(1200, 1200 + n):
         d.step(k)
     rate = n / (time.perf_counter() - t)
     print(f"{mode}: {rate:,.0f} ticks/s = {rate / 1200:.1f}x real time")
