@@ -4,9 +4,14 @@ import re
 import tomllib
 
 PHYSICS_HZ = 1200
-BIOMES = {"mixto": [60, 40, 20], "urbano": [200, 200, 60], "bosque": [150, 150, 30], "interior": [40, 30, 8]}
+BIOMES = {"mixto": [60, 40, 20], "urbano": [200, 200, 60], "bosque": [150, 150, 30], "interior": [40, 30, 8],
+          "swarm_dil_v2": [200, 200, 50]}
 SENSORS = {"tof", "lidar", "depth", "detector", "pose", "imu", "gnss", "baro", "mag", "prior_map", "battery"}
 _BRAIN_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
+
+
+DIL = {"tx_dbm", "path_loss_exp", "pl_1m_db", "noise_dbm", "shadow_sigma_db", "shadow_corr", "sinr50_db",
+       "sinr_width_db", "obstacle_db", "rate_bps"}   # radio.dil overrides of the dil_v02 link model
 
 
 class ScenarioError(ValueError):
@@ -109,22 +114,30 @@ def parse(text: str) -> dict:
         "rates_hz": rates,
     }
 
-    w = _table(raw["world"], "world", {"biome", "size_m", "density"})
+    w = _table(raw["world"], "world", {"biome", "size_m", "density", "wind", "gust_sigma", "drone_collisions"})
     biome = _choice(w, "world", "biome", BIOMES)
     size = w.get("size_m", BIOMES[biome])
     if not (isinstance(size, list) and len(size) == 3 and all(
             isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) and x > 0 for x in size)):
         _err("world.size_m", size, "debe ser una lista de 3 números > 0")
     world = {"biome": biome, "size_m": list(size),
-             "density": _get(w, "world", "density", "num", 0.2, lambda v: 0 < v < 1, "debe cumplir 0 < x < 1")}
+             "density": _get(w, "world", "density", "num", 0.2, lambda v: 0 < v < 1, "debe cumplir 0 < x < 1"),
+             "gust_sigma": _get(w, "world", "gust_sigma", "num", 0.0, lambda v: v >= 0, "debe ser >= 0"),
+             "drone_collisions": _get(w, "world", "drone_collisions", "bool", True)}
+    wind = w.get("wind", [0.0, 0.0, 0.0])
+    if not (isinstance(wind, list) and len(wind) == 3 and all(
+            isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) for x in wind)):
+        _err("world.wind", wind, "debe ser una lista de 3 números (m/s, ENU)")
+    world["wind"] = [float(x) for x in wind]
 
-    ra = _table(raw.get("radio", {}), "radio", {"profile", "packet_bytes", "ranging", "max_packets", "range_m", "loss"})
+    ra = _table(raw.get("radio", {}), "radio", {"profile", "packet_bytes", "ranging", "max_packets", "range_m", "loss", "dil"})
     radio = {"profile": _choice(ra, "radio", "profile", {"ideal", "disco", "dil_v02"}, "dil_v02"),
              "packet_bytes": _get(ra, "radio", "packet_bytes", "int", 64, lambda v: v >= 1, "debe ser >= 1"),
              "ranging": _get(ra, "radio", "ranging", "bool", False),
              "max_packets": _get(ra, "radio", "max_packets", "int", 4, lambda v: v >= 1, "debe ser >= 1"),
              "range_m": _get(ra, "radio", "range_m", "num", 100.0, _pos, "debe ser > 0"),
-             "loss": _get(ra, "radio", "loss", "num", 0.0, lambda v: 0 <= v < 1, "debe cumplir 0 <= x < 1")}
+             "loss": _get(ra, "radio", "loss", "num", 0.0, lambda v: 0 <= v < 1, "debe cumplir 0 <= x < 1"),
+             "dil": {k: _get(ra["dil"], "radio.dil", k, "num") for k in _table(ra.get("dil", {}), "radio.dil", DIL)}}
 
     teams, names = raw["team"], set()
     if not isinstance(teams, list) or not teams:
@@ -132,7 +145,8 @@ def parse(text: str) -> dict:
     team = []
     for i, t in enumerate(teams):
         p = f"team[{i}]"
-        _table(t, p, {"name", "count", "brain", "brain_params", "role", "drone", "memory_bytes", "sensors", "launch_s"})
+        _table(t, p, {"name", "count", "brain", "brain_params", "role", "drone", "memory_bytes", "sensors", "launch_s",
+                    "dynamics"})
         name = _get(t, p, "name", "str", check=bool, why="no puede estar vacío")
         if name in names:
             _err(f"{p}.name", name, "nombre de equipo duplicado")
@@ -143,6 +157,7 @@ def parse(text: str) -> dict:
             **_brain(t, p),
             "role": _get(t, p, "role", "str", "nav", bool, "no puede estar vacío"),
             "drone": _choice(t, p, "drone", {"cf2", "iris"}, "iris"),
+            "dynamics": _choice(t, p, "dynamics", {"quad", "pointmass"}, "quad"),
             "memory_bytes": _get(t, p, "memory_bytes", "int", None, lambda v: v >= 0, "debe ser >= 0"),
             "launch_s": _get(t, p, "launch_s", "num", 0.0, lambda v: v >= 0, "debe ser >= 0"),
             "sensors": _sensors(t.get("sensors", {}), f"{p}.sensors", phys),

@@ -25,6 +25,7 @@ SPACING = 2.0          # m between spawn points
 GS_GAIN_DB = 12.0      # ground-station antenna gain over a drone antenna (swarm-dil v0.2)
 LAND = Velocity((0.0, 0.0, -0.5))
 LINK_EVERY = 5         # record the delivered radio links every 5th slot (2 Hz at 10 Hz slots)
+LIVE_S = 3.0           # wall seconds between two live snapshots
 
 
 def load_brain(path, params):
@@ -44,7 +45,8 @@ def spawn_points(world, n, row, clear, anchor="A"):
     return np.c_[xy, world.ground(xy)]
 
 
-def run(sc, world=None, record=False):
+def run(sc, world=None, record=False, live=None):
+    """One run. With record=True, live(partial) is called every LIVE_S wall seconds with the run so far."""
     s, rates = sc["scenario"], sc["scenario"]["rates_hz"]
     seed, phys = s["seed"], rates["physics"]
     w = world or generate(sc["world"]["biome"], sc["world"]["size_m"], sc["world"]["density"], seed)
@@ -56,7 +58,8 @@ def run(sc, world=None, record=False):
         n, anchor = t["count"], mission.spawn(k)
         row = per_anchor.get(anchor, 0)
         per_anchor[anchor] = row + 1
-        d = Drones(t["drone"], n, stream(seed, "team", k, "wind"), w)
+        d = Drones(t["drone"], n, stream(seed, "team", k, "wind"), w, t["dynamics"], sc["world"]["wind"],
+                   sc["world"]["gust_sigma"], collide=sc["world"]["drone_collisions"])
         d.reset(spawn_points(w, n, row, CLEAR[sc["world"]["biome"]], anchor), np.zeros(n), landed=True)
         sens = Sensors(t["sensors"], n, seed, range(g0, g0 + n), w, d, np.full(n, k), d.p.copy(), t["drone"])
         brains = [load_brain(t["brain"], t["brain_params"]) for _ in range(n)]
@@ -106,6 +109,7 @@ def run(sc, world=None, record=False):
     failed = np.zeros(N, bool)
     cpu, steps, mem = np.zeros(N), np.zeros(N, int), np.zeros(N, int)
     events, frames, links = [], [], []
+    live_at = time.perf_counter() + LIVE_S
 
     def all_of(attr):
         return np.concatenate([getattr(t["drones"], attr) for t in teams])
@@ -163,6 +167,12 @@ def run(sc, world=None, record=False):
             t["sensors"].step(tick)
         if record and tick % krec == 0:
             frames.append((tsec, all_of("p").copy(), all_of("q").copy(), all_of("alive").copy()))
+            if live is not None and time.perf_counter() > live_at:
+                live({"metrics": {"mission": s["mission"], "agents": N, "live": True, "seconds": tsec,
+                                  "crashes": sum(e[2].startswith("crash") or e[2] == "geofence" for e in events)},
+                      "events": events, "world": w, "frames": frames, "links": links,
+                      "station": gs_pos.tolist() if station is not None else None})
+                live_at = time.perf_counter() + LIVE_S
         if tick % kb == 0:
             alive = all_of("alive")
             working = alive & ~mission.done & ~failed

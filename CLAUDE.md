@@ -5,7 +5,7 @@ Plan y fases: `PLAN.md`. Contratos entre módulos y clústeres de trabajo: `.ia/
 
 ## Regla de oro
 
-Un cerebro solo recibe lo que un dron real mediría: lecturas de sensores con ruido, en su marco y a su frecuencia, y bytes de radio. Nunca geometría del mundo, rejillas ni coordenadas globales, salvo que un sensor encendido las produzca (`gnss`, `prior_map`). `brains/` importa solo `c2lab.brain`, la biblioteca estándar, numpy y scipy; `tests/test_isolation.py` lo hace cumplir. Los cerebros de `brains/privileged/` (solo para validar métricas) son la única excepción y se marcan en los resultados.
+Un cerebro solo recibe lo que un dron real mediría: lecturas de sensores con ruido, en su marco y a su frecuencia, y bytes de radio. Nunca geometría del mundo, rejillas ni coordenadas globales, salvo que un sensor encendido las produzca (`gnss`, `prior_map`). `brains/` importa solo `c2lab.brain`, la biblioteca estándar, numpy, scipy y el agente de GRACE-3D (`sim3d.agent`, `sim3d.geom`, de swarm-dil; nunca su `sim3d.world`); `tests/test_isolation.py` lo hace cumplir. Los cerebros de `brains/privileged/` (solo para validar métricas) son la única excepción y se marcan en los resultados.
 
 ## Convenciones
 

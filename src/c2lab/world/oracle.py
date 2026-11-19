@@ -8,7 +8,7 @@ import math
 import numpy as np
 from scipy import ndimage
 
-RES = {"mixto": 0.5, "urbano": 1.0, "bosque": 1.0, "interior": 0.25}
+RES = {"mixto": 0.5, "urbano": 1.0, "bosque": 1.0, "interior": 0.25, "swarm_dil_v2": 1.25}
 INFLATE = 0.6   # m: iris collision radius 0.384 + 0.2 margin
 ALT = 2.0       # m above A and B
 

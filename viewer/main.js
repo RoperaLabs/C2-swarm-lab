@@ -193,16 +193,13 @@ function loadRun(r) {
   group.add(mesh);
   const trails = [];
   for (let i = 0; i < n; i++) {
-    const pos = new Float32Array(r.t.length * 3);
-    r.p.forEach((f, k) => pos.set(f.slice(3 * i, 3 * i + 3), 3 * k));
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: TEAM_COLORS[teams.indexOf(r.teams[i])], transparent: true, opacity: 0.5 }));
+    const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: TEAM_COLORS[teams.indexOf(r.teams[i])], transparent: true, opacity: 0.5 }));
     trails.push(line);
     group.add(line);
   }
+  fillTrails(r, trails);
   // radio links (one segment per delivered packet pair, refreshed from the latest recorded slot)
-  const maxPairs = Math.max(1, ...r.links.map(l => l[1].length));
+  const maxPairs = (n + 1) * n;
   const linkGeo = new THREE.BufferGeometry();
   linkGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(maxPairs * 6), 3));
   const links = new THREE.LineSegments(linkGeo, new THREE.LineBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.55 }));
@@ -225,7 +222,7 @@ function loadRun(r) {
   const lbl = document.createElement('span');
   btn.textContent = 'pause'; btn.onclick = () => { play = !play; btn.textContent = play ? 'pause' : 'play'; };
   slider.type = 'range'; slider.min = 0; slider.max = r.t.length - 1; slider.value = 0; slider.style.width = '100%';
-  slider.oninput = () => { tNow = r.t[+slider.value]; };
+  slider.oninput = () => { tNow = r.t[+slider.value]; run.edge = +slider.value >= r.t.length - 2; };
   for (const s of [0.25, 0.5, 1, 2, 4, 8]) { const o = document.createElement('option'); o.value = s; o.textContent = `${s}x`; if (s === 1) o.selected = true; sp.append(o); }
   sp.onchange = () => { speed = +sp.value; };
   const follow = document.createElement('select');
@@ -238,23 +235,44 @@ function loadRun(r) {
   panelEl.append(bar);
   const evs = document.createElement('div');      // events: click to jump there
   evs.style.cssText = 'max-height:140px;overflow:auto;font-size:11px;margin-top:4px';
-  for (const e of r.events.filter(e => e.kind !== 'takeoff')) {
+  const info = document.createElement('div');
+  info.style.whiteSpace = 'pre-wrap';
+  panelEl.append(evs, info);
+  run.ui = { slider, lbl, evs, info };
+  fillPanel(r);
+}
+
+function fillTrails(r, trails) {
+  trails.forEach((line, i) => {
+    const pos = new Float32Array(r.t.length * 3);
+    r.p.forEach((f, k) => pos.set(f.slice(3 * i, 3 * i + 3), 3 * k));
+    line.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    line.geometry.computeBoundingSphere();
+  });
+}
+
+function fillPanel(r) {
+  const { evs, info } = run.ui;
+  evs.replaceChildren(...r.events.filter(e => e.kind !== 'takeoff').map(e => {
     const b = document.createElement('div');
     b.textContent = `${e.t.toFixed(1)} s  #${e.agent}  ${e.kind}`;
     b.style.cursor = 'pointer';
-    b.onclick = () => { tNow = e.t; };
-    evs.append(b);
-  }
-  panelEl.append(evs);
-  run.ui = { slider, lbl };
-  const m = r.metrics;
-  const info = document.createElement('div');
-  info.style.whiteSpace = 'pre-wrap';
-  const pct = (x) => `${(100 * x).toFixed(0)} %`;
-  const score = { a_to_b: `arrival ${pct(m.arrival_rate)}`, coverage: `coverage ${pct(m.coverage)}`,
-    pursuit: `captured ${pct(m.capture_rate)}` }[m.mission] ?? '';
+    b.onclick = () => { tNow = e.t; run.edge = false; };
+    return b;
+  }));
+  const m = r.metrics, pct = (x) => `${(100 * x).toFixed(0)} %`;
+  const score = m.live ? `LIVE ${m.seconds.toFixed(0)} s` : { a_to_b: `arrival ${pct(m.arrival_rate)}`,
+    coverage: `coverage ${pct(m.coverage)}`, pursuit: `captured ${pct(m.capture_rate)}` }[m.mission] ?? '';
   info.textContent = `${m.mission}: ${score}  crashes ${m.crashes}  agents ${m.agents}` + (m.privileged ? '  (privileged)' : '');
-  panelEl.append(info);
+}
+
+function updateRun(d) {          // live mode: the run grew; keep the camera and, at the live edge, stay on it
+  const r = run.r;
+  Object.assign(r, { t: d.t, p: d.p, q: d.q, alive: d.alive, links: d.links || [], events: d.events, metrics: d.metrics });
+  fillTrails(r, run.trails);
+  run.ui.slider.max = r.t.length - 1;
+  fillPanel(r);
+  if (run.edge) tNow = r.t[r.t.length - 1];
 }
 
 function showFrame() {
@@ -302,6 +320,37 @@ renderer.setAnimationLoop(() => {
 });
 
 const params = new URLSearchParams(location.search);
-const src = params.get('run') || params.get('world') || 'sample_world.json';
-fetch(src).then(r => r.json()).then(d => (d.frames || d.t ? loadRun(d) : load(d)))
-  .catch(e => { panelEl.textContent = `load error: ${e}`; console.error(e); });
+const sweepDir = params.get('sweep');
+let src = params.get('run') || params.get('world') || 'sample_world.json', shown = null;
+const fresh = (u) => fetch(`${u}${u.includes('?') ? '&' : '?'}ts=${Date.now()}`).then(r => r.json());
+const poll = () => {             // live: poll the replay while the run writes it (run --live, sweep --live)
+  const u = src;
+  fresh(u).then(d => {
+    if (u !== src) return;
+    if (shown !== u) { loadRun(d); run.edge = true; tNow = d.t[d.t.length - 1]; shown = u; }
+    else if (d.t.length !== run.r.t.length || !d.metrics.live) updateRun(d);
+  }).catch(() => { if (!run) panelEl.textContent = 'waiting for the run...'; })
+    .finally(() => { if (sweepDir || !run || run.r.metrics.live) setTimeout(poll, 2000); });
+};
+if (sweepDir) {                  // sweep --live: follow what one worker process is running, run after run
+  const box = document.createElement('div'), sel = document.createElement('select');
+  box.style.cssText = 'position:fixed;top:8px;right:8px;background:#000c;color:#ddd;padding:6px;font:12px monospace';
+  box.append('worker ', sel);
+  document.body.append(box);
+  let slots = 0, follow = 0;
+  sel.onchange = () => { follow = +sel.value; };
+  const workers = () => Promise.all([...Array(slots + 1).keys()].map(k => fresh(`${sweepDir}/_live/${k}.json`).catch(() => null)))
+    .then(ws => {                // probe one slot past the last found: a late worker joins the list
+      slots = Math.max(slots, ws.findLastIndex(Boolean) + 1);
+      sel.replaceChildren(...ws.map((w, k) => w && new Option(`${k}: ${w.run}`, k)).filter(Boolean));
+      sel.value = follow;
+      if (ws[follow]) src = `${sweepDir}/${ws[follow].run}/replay.json`;
+    })
+    .finally(() => setTimeout(workers, 2000));
+  workers().then(poll);
+} else if (params.get('live')) {
+  poll();
+} else {
+  fetch(src).then(r => r.json()).then(d => (d.frames || d.t ? loadRun(d) : load(d)))
+    .catch(e => { panelEl.textContent = `load error: ${e}`; console.error(e); });
+}

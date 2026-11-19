@@ -15,7 +15,7 @@ import numpy as np
 from c2lab.world import oracle
 
 GOAL_ALT, GOAL_R = 2.0, 2.0                  # m: goal 2 m above B, reached within 2 m
-PATH_RES = {"mixto": 0.5, "urbano": 2.0, "bosque": 1.0, "interior": 0.25}   # oracle grid for the shortest paths
+PATH_RES = {"mixto": 0.5, "urbano": 2.0, "bosque": 1.0, "interior": 0.25, "swarm_dil_v2": 1.25}   # oracle grid for the shortest paths
 GUIDE_INFLATE = 0.9                          # m, clearance of the path handed to privileged brains
 CAPTURE_R, CAPTURE_T = 2.0, 0.5              # m, s: a pursuer this close for this long captures an evader
 COVER_RES = 1.0                              # m, surface voxels for the coverage score
@@ -67,7 +67,9 @@ class AToB(Mission):
         self.flown, self.last = np.zeros(self.N), self.homes.copy()
 
     def info(self, g, home, gnss):
-        out = {"goal_local": tuple(self.goal - home)}
+        lo, hi = self.w.bounds
+        out = {"goal_local": tuple(self.goal - home), "a_local": tuple(np.array(self.w.anchors["A"]) - home),
+               "area_local": (tuple(lo - home), tuple(hi - home))}
         if gnss:
             out["goal_enu"] = tuple(self.goal)
         if self.guide is not None:
@@ -89,7 +91,10 @@ class AToB(Mission):
                 "time_mean": float(self.arrived[ok].mean()) if ok.any() else None,
                 "flown_mean": float(self.flown[ok].mean()) if ok.any() else None,
                 "oracle_length": float(np.mean(self.short[np.isfinite(self.short)])),
-                "regret_mean": float(regret.mean()) if ok.any() else None}
+                "regret_mean": float(regret.mean()) if ok.any() else None,
+                "per_agent": {"flown_m": np.round(self.flown, 2).tolist(),
+                              "arrived_s": [None if np.isnan(x) else round(float(x), 2) for x in self.arrived],
+                              "final_enu": np.round(self.last, 2).tolist()}}
 
 
 class Coverage(Mission):

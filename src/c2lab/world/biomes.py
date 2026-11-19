@@ -11,7 +11,7 @@ from c2lab.seeds import rng as stream
 from . import oracle
 from .world import World
 
-CLEAR = {"mixto": 4.0, "urbano": 10.0, "bosque": 6.0, "interior": 3.0}   # m, free radius around A and B
+CLEAR = {"mixto": 4.0, "urbano": 10.0, "bosque": 6.0, "interior": 3.0, "swarm_dil_v2": 10.0}   # m, free radius around A and B
 MAX_ATTEMPTS = 20
 _OVERLAP = 0.3   # a new object may cover at most this share of already-covered cells
 
@@ -376,8 +376,51 @@ def z_top(biome, size):
     return size[2] - 0.3 - 0.55 if biome == "interior" else None
 
 
+def merge_boxes(blocked):
+    """Greedy cover of a boolean voxel grid by disjoint boxes (x runs, then rows in y, then layers in z): list of
+    (lo, hi) voxel index ranges, hi exclusive."""
+    left, out = blocked.copy(), []
+    for x, y, z in np.argwhere(blocked):
+        if not left[x, y, z]:
+            continue
+        x1 = x + 1
+        while x1 < left.shape[0] and left[x1, y, z]:
+            x1 += 1
+        y1 = y + 1
+        while y1 < left.shape[1] and left[x:x1, y1, z].all():
+            y1 += 1
+        z1 = z + 1
+        while z1 < left.shape[2] and left[x:x1, y:y1, z1].all():
+            z1 += 1
+        left[x:x1, y:y1, z:z1] = False
+        out.append(((x, y, z), (x1, y1, z1)))
+    return out
+
+
+def swarm_dil_v2(seed):
+    """The GRACE-3D 2.0.0 terrain of swarm-dil (sim3d.world.Mission defaults: 40 x 40 x 10 voxels of 5 m) for the same
+    seed, as merged boxes on flat ground; A and B sit under the centres of its start and goal voxels."""
+    from sim3d.world import Mission
+    from swarm_dil.nav3.world3 import make_world
+    m = Mission()
+    blocked, start, goal, _ = make_world(m, np.random.default_rng(seed))
+    c = m.cell_m
+    prims = [_box("block", (np.add(lo, hi) / 2 * c).tolist(), (np.subtract(hi, lo) / 2 * c).tolist())
+             for lo, hi in merge_boxes(blocked)]
+    size = [float(n * c) for n in m.shape]
+    return World.from_dict({"biome": "swarm_dil_v2", "seed": seed, "density": float(blocked[:, :, 0].mean()),
+                            "bounds": [[0, 0, 0], size], "terrain": {"heights": np.zeros((2, 2)).tolist()},
+                            "anchors": {k: [(v[0] + 0.5) * c, (v[1] + 0.5) * c, 0.0]
+                                        for k, v in (("A", start), ("B", goal))},
+                            "primitives": prims})
+
+
 def generate(biome, size_m, density, seed):
     t0 = time.perf_counter()
+    if biome == "swarm_dil_v2":                     # fixed size and terrain: size_m and density do not apply
+        w = swarm_dil_v2(seed)
+        w.attempts, w.seconds = 1, time.perf_counter() - t0
+        return w
     for attempt in range(MAX_ATTEMPTS):
         r = stream(seed, "world", attempt)
         heights = _terrain(r, size_m, r.uniform(3, 5)) if biome == "bosque" else None

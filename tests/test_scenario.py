@@ -30,11 +30,12 @@ def test_example_loads():
 def test_minimal_defaults():
     s = parse(MIN)
     assert s["scenario"]["rates_hz"] == {"physics": 1200, "brain": 10, "radio": 10, "record": 30}
-    assert s["world"] == {"biome": "mixto", "size_m": [60, 40, 20], "density": 0.2}
+    assert s["world"] == {"biome": "mixto", "size_m": [60, 40, 20], "density": 0.2, "gust_sigma": 0.0, "drone_collisions": True,
+                          "wind": [0.0, 0.0, 0.0]}
     assert s["radio"] == {"profile": "dil_v02", "packet_bytes": 64, "ranging": False, "max_packets": 4,
-                          "range_m": 100.0, "loss": 0.0}
+                          "range_m": 100.0, "loss": 0.0, "dil": {}}
     assert s["team"][0] == {"name": "a", "count": 2, "brain": "brains.x:X", "brain_params": {}, "role": "nav",
-                            "drone": "iris", "memory_bytes": None, "launch_s": 0.0,
+                            "drone": "iris", "dynamics": "quad", "memory_bytes": None, "launch_s": 0.0,
                             "sensors": {}}
     assert "ground_station" not in s
 

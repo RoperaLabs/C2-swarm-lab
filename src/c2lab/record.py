@@ -1,6 +1,7 @@
 """Run directory: meta.json (scenario, versions, hashes), metrics.json, events.jsonl and replay.json (world + frames,
 read by viewer/?run=...)."""
 import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -19,6 +20,14 @@ def save(out_dir, scenario, result):
     with open(out / "events.jsonl", "w", encoding="utf-8") as f:
         for tick, g, kind, info in result["events"]:
             f.write(json.dumps({"tick": tick, "agent": g, "kind": kind, "info": info}) + "\n")
+    return save_replay(out, scenario, result)
+
+
+def save_replay(out_dir, scenario, result):
+    """replay.json alone (what the viewer reads); a live run rewrites it while it goes on."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    w = result["world"]
     frames = result.get("frames", [])
     replay = {"world": w.to_dict(), "metrics": result["metrics"],
               "teams": [t["name"] for t in scenario["team"] for _ in range(t["count"])],
@@ -31,5 +40,10 @@ def save(out_dir, scenario, result):
               "station": result.get("station"),
               "events": [{"t": round(tick / scenario["scenario"]["rates_hz"]["physics"], 3), "agent": g, "kind": kind}
                          for tick, g, kind, _ in result["events"]]}
-    (out / "replay.json").write_text(json.dumps(replay, separators=(",", ":")), encoding="utf-8")
+    tmp = out / "replay.json.tmp"
+    tmp.write_text(json.dumps(replay, separators=(",", ":")), encoding="utf-8")
+    try:
+        os.replace(tmp, out / "replay.json")       # a viewer polling a live run never reads half a file
+    except PermissionError:                        # the server holds it open (Windows): next snapshot retries
+        pass
     return out

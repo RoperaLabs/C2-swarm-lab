@@ -16,11 +16,11 @@ MOUNTS = {"front": (0, 0), "left": (90, 0), "back": (180, 0), "right": (-90, 0),
 
 DEFAULTS = {
     "tof": {"arrays": ["front"], "zones": 8, "fov_deg": 45.0, "range_m": 4.0, "min_m": 0.02, "hz": 15, "sub": 2,
-            "sigma_rel": 0.03, "sigma_min": 0.005, "dropout": 0.01},
+            "sigma_rel": 0.03, "sigma_min": 0.005, "dropout": 0.01, "drones": True},
     "lidar": {"channels": 16, "vfov_deg": [-7.0, 52.0], "hres_deg": 2.0, "range_m": 40.0, "min_m": 0.1, "hz": 10,
-              "sigma": 0.02, "dropout": 0.01},
+              "sigma": 0.02, "dropout": 0.01, "drones": True},
     "depth": {"width": 64, "height": 48, "hfov_deg": 87.0, "vfov_deg": 58.0, "range_m": 10.0, "min_m": 0.3, "hz": 15,
-              "sigma_k": 0.01},
+              "sigma_k": 0.01, "drones": True},
     "detector": {"fov_deg": 90.0, "range_m": 30.0, "hz": 10, "p_detect": 0.95, "sigma_deg": 1.0, "sigma_rel": 0.05,
                  "false_rate": 0.02, "p_confuse": 0.02},
     "pose": {"profile": "ekf", "hz": 50, "drift": 0.01, "max_h": 4.0},
@@ -138,7 +138,7 @@ class Sensors:
             return self.drones.p, self.drones.alive, self.labels, 0
         return (*self.peers(), self.g0)
 
-    def _cast(self, local, rng_m):
+    def _cast(self, local, rng_m, drones=True):
         d = self.drones
         sh = local.shape[:-1]
         flat = local.reshape(-1, 3)
@@ -147,9 +147,10 @@ class Sensors:
         o = np.repeat(d.p, len(flat), 0)
         dirs = np.ascontiguousarray(dirs.reshape(-1, 3))
         dist, _, _ = self.world.raycast(o, dirs, rng_m)
-        P, A, _, off = self._crowd()                             # other drones are spheres to the sensor
-        owner = np.repeat(np.arange(self.n), len(flat)) + off
-        sphere_hits(o, dirs, owner, np.ascontiguousarray(P), A, d.prof.radius, dist)
+        if drones:                                               # other drones are spheres to the sensor
+            P, A, _, off = self._crowd()
+            owner = np.repeat(np.arange(self.n), len(flat)) + off
+            sphere_hits(o, dirs, owner, np.ascontiguousarray(P), A, d.prof.radius, dist)
         if self.hits is not None:
             ok = np.isfinite(dist)
             self.hits.append(o[ok] + dirs[ok] * dist[ok][:, None])
@@ -167,18 +168,18 @@ class Sensors:
 
     def _tof(self):
         c = self.cfg["tof"]
-        dist = self._cast(self._rays["tof"], c["range_m"]).min(-1)               # nearest target in each zone
+        dist = self._cast(self._rays["tof"], c["range_m"], c["drones"]).min(-1)               # nearest target in each zone
         return self._noisy("tof", dist, np.maximum(c["sigma_min"], c["sigma_rel"] * np.nan_to_num(dist, posinf=0)),
                            c["min_m"], c["range_m"], c["dropout"])
 
     def _lidar(self):
         c = self.cfg["lidar"]
-        dist = self._cast(self._rays["lidar"], c["range_m"])
+        dist = self._cast(self._rays["lidar"], c["range_m"], c["drones"])
         return self._noisy("lidar", dist, np.full(dist.shape, c["sigma"]), c["min_m"], c["range_m"], c["dropout"])
 
     def _depth(self):
         c, rays = self.cfg["depth"], self._rays["depth"]
-        z = self._cast(rays, c["range_m"] / rays[..., 0].min()) * rays[..., 0]     # range -> depth along the axis
+        z = self._cast(rays, c["range_m"] / rays[..., 0].min(), c["drones"]) * rays[..., 0]     # range -> depth along the axis
         return self._noisy("depth", z, c["sigma_k"] * np.nan_to_num(z, posinf=0) ** 2, c["min_m"], c["range_m"])
 
     # --- detector ----------------------------------------------------------------------------------------------

@@ -12,6 +12,7 @@ _MAX_DIST = 5.0                     # m, cap of the safe-distance budget (re-che
 _LAND_SPEED = 1.0                   # m/s, faster ground contact is a crash
 _LAND_COS_TILT = np.cos(np.radians(20.0))
 _CLIMB = 0.2                        # m/s or m of climb that triggers a take-off
+_PM_CONTACT = 10                    # point mass: contacts every 10 ticks (120 Hz, <= 0.1 m flown between checks)
 
 
 def _yaw(R):
@@ -20,9 +21,9 @@ def _yaw(R):
 
 class Drones:
     def __init__(self, profile, n, rng, world, mode="quad", wind=(0.0, 0.0, 0.0), gust_sigma=0.0, gust_tau=2.0,
-                 dt=1 / 1200):
+                 dt=1 / 1200, collide=True):
         self.prof = PROFILES[profile] if isinstance(profile, str) else profile
-        self.n, self.dt, self.world, self.mode = n, dt, world, mode
+        self.n, self.dt, self.world, self.mode, self.collide = n, dt, world, mode, collide
         self.model = (Quad(self.prof, n, rng, wind, gust_sigma, gust_tau, dt) if mode == "quad"
                       else PointMass(self.prof, n, dt))
         self.ap = Autopilot(self.prof, n, dt)
@@ -110,8 +111,9 @@ class Drones:
             need = m.tick(None if err is None else err.dyaw, tick % self._k_att == 0)
         else:
             m.step(ap.a_des, ap.yaw_sp)
-            self._budget -= np.linalg.norm(m.v, axis=1) * self.dt
-            need = True
+            need = tick % _PM_CONTACT == 0
+            if need:
+                self._budget -= np.linalg.norm(m.v, axis=1) * self.dt * _PM_CONTACT
         if need:
             fly = np.flatnonzero(self.alive & ~self.landed)
             if fly.size:
@@ -151,7 +153,7 @@ class Drones:
                 self._budget[chk] = w.sdf(p[chk], terrain=True, max_dist=_MAX_DIST) - r
 
         fly = np.flatnonzero(self.alive & ~self.landed)
-        if fly.size > 1:
+        if self.collide and fly.size > 1:
             d = np.linalg.norm(p[fly, None] - p[None, fly], axis=2)
             np.fill_diagonal(d, np.inf)
             bad = fly[(d < 2 * r).any(1)]

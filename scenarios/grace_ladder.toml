@@ -1,0 +1,66 @@
+# F7.4 realism ladder for GRACE-3D 2.0.0: the equivalence bridge (swarm-dil's idealisations on its own terrain) and one
+# realism factor at a time on the same 20 seeds, plus all of them together. `python benchmarks/grace_ladder.py`.
+
+[scenario]
+name = "grace_ladder"
+seed = 0
+duration_s = 1000
+mission = "a_to_b"
+rates_hz = { record = 1 }
+
+[world]
+biome = "swarm_dil_v2"
+drone_collisions = false     # swarm-dil agents share voxels freely
+
+[radio]
+profile = "dil_v02"
+packet_bytes = 64
+dil = { tx_dbm = -16.0, rate_bps = 9600.0 }
+
+[[team]]
+name = "grace"
+count = 10
+drone = "iris"
+dynamics = "pointmass"
+brain = "brains.grace3d:Grace3D"
+brain_params = { team = 10, view = "swarm_dil" }
+sensors.pose = { profile = "ideal" }
+sensors.tof = { arrays = ["front", "left", "right", "back", "up", "down"], fov_deg = 90, zones = 8, range_m = 25, hz = 5, sub = 1, sigma_rel = 0, sigma_min = 0, dropout = 0, drones = false }
+
+[sweep]
+seeds = [0, 20]
+
+[[sweep.variant]]
+name = "bridge"
+
+[[sweep.variant]]
+name = "a_urbano"                    # continuous urban world instead of swarm-dil's voxel terrain
+set = { "world.biome" = "urbano", "world.size_m" = [200, 200, 50] }
+
+[[sweep.variant]]
+name = "b_tof_noise"                 # ToF noise, dropouts and 2 x 2 subrays per zone (sensor defaults)
+set = { "team.0.sensors.tof" = { arrays = ["front", "left", "right", "back", "up", "down"], fov_deg = 90, zones = 8, range_m = 25, hz = 5, drones = false } }
+
+[[sweep.variant]]
+name = "c_vio"                       # drifting visual-inertial odometry instead of ideal pose
+set = { "team.0.sensors.pose" = { profile = "vio" } }
+
+[[sweep.variant]]
+name = "d_quad_wind"                 # quadrotor dynamics in a 3 m/s wind with 1 m/s gusts
+set = { "team.0.dynamics" = "quad", "world.wind" = [3.0, 0.0, 0.0], "world.gust_sigma" = 1.0 }
+
+[[sweep.variant]]
+name = "e_radio_ideal"               # reference: every packet arrives (the cost of the channel)
+set = { "radio.profile" = "ideal" }
+
+[[sweep.variant]]
+name = "f_crowd"                     # teammates are obstacles: seen by the ToF and colliding
+set = { "world.drone_collisions" = true, "team.0.sensors.tof" = { arrays = ["front", "left", "right", "back", "up", "down"], fov_deg = 90, zones = 8, range_m = 25, hz = 5, sub = 1, sigma_rel = 0, sigma_min = 0, dropout = 0 } }
+
+[[sweep.variant]]
+name = "g_view_all"                  # sensing design: GRACE ingests every ToF return, not swarm-dil's two frusta
+set = { "team.0.brain_params" = { team = 10, view = "all" } }
+
+[[sweep.variant]]
+name = "z_all"                       # b + c + d + f together, on swarm-dil's terrain
+set = { "team.0.sensors.tof" = { arrays = ["front", "left", "right", "back", "up", "down"], fov_deg = 90, zones = 8, range_m = 25, hz = 5 }, "team.0.sensors.pose" = { profile = "vio" }, "team.0.dynamics" = "quad", "world.wind" = [3.0, 0.0, 0.0], "world.gust_sigma" = 1.0, "world.drone_collisions" = true }

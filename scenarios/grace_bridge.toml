@@ -1,0 +1,28 @@
+# F7.3 equivalence bridge: GRACE-3D 2.0.0 on the swarm-dil v2 terrain under swarm-dil's own idealisations (ideal pose,
+# noiseless ToF of 5 voxels, point mass, its radio parameters). One run with its replay; the 20-seed comparison
+# is the `bridge` variant of grace_ladder.toml.
+
+[scenario]
+name = "grace_bridge"
+seed = 0
+duration_s = 1000
+mission = "a_to_b"
+
+[world]
+biome = "swarm_dil_v2"
+drone_collisions = false     # swarm-dil agents share voxels freely
+
+[radio]
+profile = "dil_v02"
+packet_bytes = 64
+dil = { tx_dbm = -16.0, rate_bps = 9600.0 }
+
+[[team]]
+name = "grace"
+count = 10
+drone = "iris"
+dynamics = "pointmass"
+brain = "brains.grace3d:Grace3D"
+brain_params = { team = 10, view = "swarm_dil" }
+sensors.pose = { profile = "ideal" }
+sensors.tof = { arrays = ["front", "left", "right", "back", "up", "down"], fov_deg = 90, zones = 8, range_m = 25, hz = 5, sub = 1, sigma_rel = 0, sigma_min = 0, dropout = 0, drones = false }

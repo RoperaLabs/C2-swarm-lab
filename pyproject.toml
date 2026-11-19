@@ -13,6 +13,7 @@ dependencies = ["numpy>=2.0", "scipy>=1.11", "numba>=0.63"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+grace = ["swarm-dil @ git+https://github.com/RoperaLabs/swarm-dil@289a034d9276ec2b26274e0bff024885b752f05b"]   # GRACE-3D 2.0.0 (tag v2.0.0)
 
 [tool.setuptools.packages.find]
 where = ["src"]

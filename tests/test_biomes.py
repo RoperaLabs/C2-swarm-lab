@@ -5,7 +5,7 @@ from c2lab.scenario import BIOMES
 from c2lab.world import biomes, generate, oracle
 
 
-@pytest.mark.parametrize("biome", sorted(BIOMES))
+@pytest.mark.parametrize("biome", sorted(set(BIOMES) - {"swarm_dil_v2"}))
 def test_biome(biome):
     size = BIOMES[biome]
     worlds = [generate(biome, size, 0.2, s) for s in (0, 1)]
@@ -21,3 +21,16 @@ def test_biome(biome):
             assert w.sdf(col, terrain=False).min() >= biomes.CLEAR[biome] - 0.01
         cov = oracle.coverage(w, oracle.RES[biome], biomes.z_top(biome, size))
         assert abs(cov - 0.2) <= 0.15 * 0.2
+
+
+def test_swarm_dil_v2_is_the_voxel_terrain():
+    from sim3d.world import Mission
+    from swarm_dil.nav3.world3 import make_world
+    m = Mission()
+    blocked, start, goal, _ = make_world(m, np.random.default_rng(3))
+    w = generate("swarm_dil_v2", None, None, 3)
+    centres = (np.argwhere(np.ones(m.shape, bool)) + 0.5) * m.cell_m
+    assert np.array_equal(w.sdf(centres, terrain=False) < 0, blocked.ravel())
+    assert w.anchors["A"] == ((start[0] + 0.5) * 5, (start[1] + 0.5) * 5, 0.0) and w.anchors["B"][0] == 187.5
+    assert len(w.tags) < blocked.sum() / 10                    # merged into large boxes
+    assert generate("swarm_dil_v2", None, None, 3).hash == w.hash

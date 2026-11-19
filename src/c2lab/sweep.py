@@ -2,7 +2,8 @@
 
 A sweep runs every variant of a scenario on the same seeds (paired), in up to 5 processes with one numba thread each,
 writing runs/<name>/<variant>/<seed>/metrics.json (or error.json). Runs already on disk are skipped, so a killed sweep
-resumes where it stopped. Results do not depend on the number of processes: every run is seeded on its own.
+resumes where it stopped. With live=True every run also writes its replay.json while it goes on, and worker k names its
+current run in runs/<name>/_live/<k>.json (viewer: ?sweep=<dir>&live=1). Results do not depend on the number of processes: every run is seeded on its own.
 
 TOML:
     [sweep]
@@ -20,7 +21,9 @@ import json
 import math
 import os
 import traceback
+import shutil
 from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -56,13 +59,38 @@ def jobs(sc, root):
     return out
 
 
-def _one(job):
+_SLOT = None
+
+
+def _claim(live_dir):
+    """This process's worker number: the first slot file it can create."""
+    global _SLOT
+    k = 0
+    while _SLOT is None:
+        try:
+            os.close(os.open(live_dir / f"{k}.slot", os.O_CREAT | os.O_EXCL))
+            _SLOT = k
+        except FileExistsError:
+            k += 1
+    return _SLOT
+
+
+def _one(job, live=False):
     sc, out = job
+    from c2lab.record import save_replay
     from c2lab.sim import run
     path = Path(out)
     path.mkdir(parents=True, exist_ok=True)
     try:
-        r = run(sc, record=True)
+        cb = None
+        if live:
+            live_dir = path.parents[1] / "_live"
+            (live_dir / f"{_claim(live_dir)}.json").write_text(json.dumps({"run": f"{path.parent.name}/{path.name}"}),
+                                                              encoding="utf-8")
+            cb = partial(save_replay, path, sc)
+        r = run(sc, record=True, live=cb)
+        if live:
+            save_replay(path, sc, r)
         (path / "metrics.json").write_text(json.dumps({**r["metrics"], "run_hash": r["hash"]}, indent=1),
                                            encoding="utf-8")
         return out, "ok"
@@ -71,14 +99,18 @@ def _one(job):
         return out, "error"
 
 
-def sweep(sc, root, workers=MAX_WORKERS):
+def sweep(sc, root, workers=MAX_WORKERS, live=False):
     todo = [j for j in jobs(sc, root) if not (Path(j[1]) / "metrics.json").exists()]
     workers = max(1, min(workers, MAX_WORKERS))
     os.environ["NUMBA_NUM_THREADS"] = "1"           # inherited by the worker processes
+    if live:
+        shutil.rmtree(Path(root) / "_live", ignore_errors=True)
+        (Path(root) / "_live").mkdir(parents=True)
+    one = partial(_one, live=live)
     if workers == 1:
-        return [_one(j) for j in todo]
+        return [one(j) for j in todo]
     with ProcessPoolExecutor(workers) as ex:
-        return list(ex.map(_one, todo))
+        return list(ex.map(one, todo))
 
 
 def load_results(root):
@@ -87,6 +119,24 @@ def load_results(root):
     for f in Path(root).glob("*/*/metrics.json"):
         out.setdefault(f.parent.parent.name, {})[int(f.parent.name)] = json.loads(f.read_text(encoding="utf-8"))
     return out
+
+
+def progress(root):
+    """Text table: per variant, runs started / done / failed and the running means of the main metrics."""
+    cols = ("arrival_rate", "regret_mean", "coverage", "capture_rate", "crashes", "bytes_sent")
+    res, rows = load_results(root), []
+    for v in sorted(p.name for p in Path(root).iterdir() if p.is_dir() and not p.name.startswith("_")):
+        runs = res.get(v, {})
+        started = sum(1 for p in (Path(root) / v).iterdir() if p.is_dir())
+        failed = len(list((Path(root) / v).glob("*/error.json")))
+        means = []
+        for k in cols:
+            x = [m[k] for m in runs.values() if isinstance(m.get(k), (int, float))]
+            means.append(f"{np.mean(x):.3g}" if x else "-")
+        rows.append([v, f"{len(runs)}/{started}", str(failed), *means])
+    head = ["variant", "done/started", "failed", *cols]
+    w = [max(len(r[i]) for r in rows + [head]) for i in range(len(head))]
+    return "\n".join("  ".join(c.ljust(n) for c, n in zip(r, w)) for r in [head] + rows)
 
 
 def holm(p):
