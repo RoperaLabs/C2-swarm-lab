@@ -89,7 +89,7 @@ def parse(text: str) -> dict:
         raw = tomllib.loads(text)
     except tomllib.TOMLDecodeError as e:
         raise ScenarioError(f"scenario: TOML inválido: {e}") from e
-    _table(raw, "", {"scenario", "world", "radio", "team", "ground_station"})
+    _table(raw, "", {"scenario", "world", "radio", "team", "ground_station", "sweep"})
     for k in ("scenario", "world", "team"):
         if k not in raw:
             raise ScenarioError(f"{k}: sección obligatoria ausente")
@@ -152,7 +152,29 @@ def parse(text: str) -> dict:
     if "ground_station" in raw:
         g = _table(raw["ground_station"], "ground_station", {"brain", "brain_params"})
         out["ground_station"] = _brain(g, "ground_station")
+    if "sweep" in raw:
+        out["sweep"] = _sweep(raw["sweep"])
     return out
+
+
+def _sweep(sw):
+    """[sweep]: seeds = [from, to) and optional [[sweep.variant]] tables with a unique name and a `set` table."""
+    _table(sw, "sweep", {"seeds", "variant"})
+    seeds = sw.get("seeds")
+    if not (isinstance(seeds, list) and len(seeds) == 2 and all(isinstance(x, int) and not isinstance(x, bool)
+                                                                 for x in seeds) and 0 <= seeds[0] < seeds[1]):
+        _err("sweep.seeds", seeds, "debe ser [desde, hasta) con 0 <= desde < hasta")
+    variants, names = sw.get("variant", []), set()
+    for i, v in enumerate(variants):
+        p = f"sweep.variant[{i}]"
+        _table(v, p, {"name", "set"})
+        name = _get(v, p, "name", "str", check=bool, why="no puede estar vacío")
+        if name in names:
+            _err(f"{p}.name", name, "nombre de variante duplicado")
+        names.add(name)
+        if not isinstance(v.get("set", {}), dict):
+            _err(f"{p}.set", v["set"], "debe ser una tabla")
+    return {"seeds": seeds, "variant": [{"name": v["name"], "set": dict(v.get("set", {}))} for v in variants]}
 
 
 def load(path) -> dict:

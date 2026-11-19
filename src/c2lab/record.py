@@ -26,6 +26,9 @@ def save(out_dir, scenario, result):
               "p": [np.round(f[1], 3).ravel().tolist() for f in frames],
               "q": [np.round(f[2], 4).ravel().tolist() for f in frames],
               "alive": [f[3].astype(int).tolist() for f in frames],
+              "links": [[round(t, 2), pairs] for t, pairs in result.get("links", [])],
+              "covered": result.get("covered", []),
+              "station": result.get("station"),
               "events": [{"t": round(tick / scenario["scenario"]["rates_hz"]["physics"], 3), "agent": g, "kind": kind}
                          for tick, g, kind, _ in result["events"]]}
     (out / "replay.json").write_text(json.dumps(replay, separators=(",", ":")), encoding="utf-8")

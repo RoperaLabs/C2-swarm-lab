@@ -1,0 +1,37 @@
+# Paired sweep: the same 20 mixed arenas crossed by boids, a potential field and the privileged oracle.
+
+[scenario]
+name = "sweep_ab_mixto"
+seed = 0
+duration_s = 120
+mission = "a_to_b"
+
+[world]
+biome = "mixto"
+density = 0.2
+
+[radio]
+profile = "ideal"
+
+[[team]]
+name = "azul"
+count = 10
+brain = "brains.boids:Boids"
+launch_s = 2.0
+sensors.tof = { arrays = ["front", "left", "right", "back", "up", "down"] }
+sensors.pose = { profile = "ekf" }
+sensors.detector = { fov_deg = 360, range_m = 15 }
+
+[sweep]
+seeds = [0, 20]
+
+[[sweep.variant]]
+name = "boids"
+
+[[sweep.variant]]
+name = "potential_field"
+set = { "team.0.brain" = "brains.potential_field:PotentialField" }
+
+[[sweep.variant]]
+name = "oracle"
+set = { "team.0.brain" = "brains.privileged.oracle:Oracle", "team.0.launch_s" = 4.0, "team.0.sensors.pose" = { profile = "ideal" } }

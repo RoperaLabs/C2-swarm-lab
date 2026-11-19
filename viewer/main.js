@@ -182,6 +182,7 @@ addEventListener('drop', e => { e.preventDefault(); e.dataTransfer.files[0]?.tex
 const TEAM_COLORS = [0x4aa8ff, 0xff6a4a, 0x7ad35a, 0xe0c040];
 let run = null, play = true, speed = 1, tNow = 0;
 function loadRun(r) {
+  r.links = r.links || []; r.covered = r.covered || [];
   load(r.world);
   if (run) scene.remove(run.group);
   const n = r.teams.length, teams = [...new Set(r.teams)];
@@ -200,8 +201,24 @@ function loadRun(r) {
     trails.push(line);
     group.add(line);
   }
+  // radio links (one segment per delivered packet pair, refreshed from the latest recorded slot)
+  const maxPairs = Math.max(1, ...r.links.map(l => l[1].length));
+  const linkGeo = new THREE.BufferGeometry();
+  linkGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(maxPairs * 6), 3));
+  const links = new THREE.LineSegments(linkGeo, new THREE.LineBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.55 }));
+  group.add(links);
+  if (r.station) {
+    const gs = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    gs.position.copy(V(r.station));
+    group.add(gs, label('GS', V(r.station).add(S(0, 0, 2))));
+  }
+  if (r.covered.length) {           // surface voxels the swarm's sensors touched (coverage mission)
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(r.covered.flat(), 3));
+    group.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x40ffb0, size: 0.6 })));
+  }
   scene.add(group);
-  run = { r, mesh, trails, group };
+  run = { r, mesh, trails, group, links, follow: -1 };
   tNow = 0;
   const bar = document.createElement('div');
   const btn = document.createElement('button'), slider = document.createElement('input'), sp = document.createElement('select');
@@ -211,14 +228,32 @@ function loadRun(r) {
   slider.oninput = () => { tNow = r.t[+slider.value]; };
   for (const s of [0.25, 0.5, 1, 2, 4, 8]) { const o = document.createElement('option'); o.value = s; o.textContent = `${s}x`; if (s === 1) o.selected = true; sp.append(o); }
   sp.onchange = () => { speed = +sp.value; };
-  bar.append(btn, sp, lbl, slider);
+  const follow = document.createElement('select');
+  follow.append(new Option('free camera', -1), ...r.teams.map((t, i) => new Option(`follow ${i} (${t})`, i)));
+  follow.onchange = () => { run.follow = +follow.value; run.prev = null; };
+  const showLinks = document.createElement('label'), cbl = document.createElement('input');
+  cbl.type = 'checkbox'; cbl.checked = true; cbl.onchange = () => { links.visible = cbl.checked; };
+  showLinks.append(cbl, ' radio links');
+  bar.append(btn, sp, lbl, slider, follow, showLinks);
   panelEl.append(bar);
+  const evs = document.createElement('div');      // events: click to jump there
+  evs.style.cssText = 'max-height:140px;overflow:auto;font-size:11px;margin-top:4px';
+  for (const e of r.events.filter(e => e.kind !== 'takeoff')) {
+    const b = document.createElement('div');
+    b.textContent = `${e.t.toFixed(1)} s  #${e.agent}  ${e.kind}`;
+    b.style.cursor = 'pointer';
+    b.onclick = () => { tNow = e.t; };
+    evs.append(b);
+  }
+  panelEl.append(evs);
   run.ui = { slider, lbl };
   const m = r.metrics;
   const info = document.createElement('div');
   info.style.whiteSpace = 'pre-wrap';
-  info.textContent = `arrival ${(100 * m.arrival_rate).toFixed(0)} %  crashes ${m.crashes}  agents ${m.agents}` +
-    (m.privileged ? '  (privileged)' : '');
+  const pct = (x) => `${(100 * x).toFixed(0)} %`;
+  const score = { a_to_b: `arrival ${pct(m.arrival_rate)}`, coverage: `coverage ${pct(m.coverage)}`,
+    pursuit: `captured ${pct(m.capture_rate)}` }[m.mission] ?? '';
+  info.textContent = `${m.mission}: ${score}  crashes ${m.crashes}  agents ${m.agents}` + (m.privileged ? '  (privileged)' : '');
   panelEl.append(info);
 }
 
@@ -234,6 +269,20 @@ function showFrame() {
     trails[i].geometry.setDrawRange(0, k + 1);
   }
   mesh.instanceMatrix.needsUpdate = true;
+  const pos = (i) => (i < n ? r.p[k].slice(3 * i, 3 * i + 3) : r.station);
+  let li = r.links.findIndex(l => l[0] > tNow);
+  li = li < 0 ? r.links.length - 1 : li - 1;
+  const arr = run.links.geometry.attributes.position.array;
+  const pairs = li >= 0 ? r.links[li][1].filter(([a, b]) => pos(a) && pos(b)) : [];
+  pairs.forEach(([a, b], j) => { arr.set(pos(a), 6 * j); arr.set(pos(b), 6 * j + 3); });
+  run.links.geometry.setDrawRange(0, 2 * pairs.length);
+  run.links.geometry.attributes.position.needsUpdate = true;
+  if (run.follow >= 0) {           // keep the camera's offset to the followed drone
+    const target = V(pos(run.follow));
+    if (run.prev) camera.position.add(target.clone().sub(run.prev));
+    controls.target.copy(target);
+    run.prev = target;
+  }
   ui.slider.value = k;
   ui.lbl.textContent = ` t = ${r.t[k].toFixed(1)} s `;
 }

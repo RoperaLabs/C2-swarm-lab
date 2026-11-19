@@ -94,6 +94,7 @@ class AToB(Mission):
 
 class Coverage(Mission):
     """Score: share of obstacle-surface voxels touched by any ray of any agent's ray sensors (tof, lidar, depth)."""
+    COVER_RES = COVER_RES
 
     def start(self, homes, privileged):
         super().start(homes, privileged)

@@ -54,8 +54,8 @@ class PotentialField:
         if self.area is not None:
             lo, hi = self.area
             for a in range(2):                          # walls of the area (the ground is the ToF's job)
-                cmd[a] += self.k_rep * (max(0.0, EDGE - (p[a] - lo[a])) - max(0.0, EDGE - (hi[a] - p[a]))) / EDGE
-            cmd[2] -= self.k_rep * max(0.0, EDGE - (hi[2] - p[2])) / EDGE
+                cmd[a] += 2 * self.k_sep * (max(0.0, EDGE - (p[a] - lo[a])) - max(0.0, EDGE - (hi[a] - p[a]))) / EDGE
+            cmd[2] -= 2 * self.k_sep * max(0.0, EDGE - (hi[2] - p[2])) / EDGE
         dist_goal = np.linalg.norm(to)
         if dist_goal < self.best - 0.5:
             self.best, self.since = dist_goal, 0

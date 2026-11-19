@@ -24,6 +24,7 @@ from c2lab.world.biomes import CLEAR
 SPACING = 2.0          # m between spawn points
 GS_GAIN_DB = 12.0      # ground-station antenna gain over a drone antenna (swarm-dil v0.2)
 LAND = Velocity((0.0, 0.0, -0.5))
+LINK_EVERY = 5         # record the delivered radio links every 5th slot (2 Hz at 10 Hz slots)
 
 
 def load_brain(path, params):
@@ -104,7 +105,7 @@ def run(sc, world=None, record=False):
     inbox = [[] for _ in range(nodes)]
     failed = np.zeros(N, bool)
     cpu, steps, mem = np.zeros(N), np.zeros(N, int), np.zeros(N, int)
-    events, frames = [], []
+    events, frames, links = [], [], []
 
     def all_of(attr):
         return np.concatenate([getattr(t["drones"], attr) for t in teams])
@@ -151,8 +152,11 @@ def run(sc, world=None, record=False):
                 t = teams[team_of[g]]
                 t["drones"].set_setpoint(g - t["g0"], LAND)            # job over: land where it is
         if tick % kr == 0:
-            for g, box in enumerate(radio.slot(node_pos(), node_alive())):
+            boxes = radio.slot(node_pos(), node_alive())
+            for g, box in enumerate(boxes):
                 inbox[g] += box
+            if record and (tick // kr) % LINK_EVERY == 0:          # delivered links, thinned for the viewer
+                links.append((tsec, sorted({(pk.src, g) for g, box in enumerate(boxes) for pk in box})))
         for t in teams:
             for tk, i, kind in t["drones"].step(tick, t["sensors"].err):
                 events.append((tk, t["g0"] + i, kind, ""))
@@ -175,6 +179,11 @@ def run(sc, world=None, record=False):
     }
     out = {"metrics": metrics, "events": events, "world": w}
     if record:
-        out["frames"] = frames
+        out["frames"], out["links"] = frames, links
+        if station is not None:
+            out["station"] = gs_pos.tolist()
+        if getattr(mission, "seen", None) is not None:                 # covered surface voxels, for the viewer
+            idx = np.argwhere(mission.seen & mission.surface)
+            out["covered"] = (mission.lo + (idx + 0.5) * mission.COVER_RES).round(2).tolist()
         out["hash"] = hashlib.sha256(b"".join(f[1].tobytes() + f[2].tobytes() for f in frames)).hexdigest()
     return out
