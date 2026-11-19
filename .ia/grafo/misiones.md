@@ -17,3 +17,4 @@ A Aceptación (20 semillas emparejadas, 5 procesos):
   - cobertura: central 0,797 ± 0,067 frente a aleatoria 0,776 ± 0,051, Wilcoxon emparejado p = 0,011 ✓
   - persecución: evasor que huye capturado 80 % con 1 perseguidor y 100 % con 4 ✓
   - FUERA (por poco): evasor quieto capturado 95 % (objetivo 100 %); la semilla que falla tiene choques contra obstáculos a 3 m/s
+A Revalidación tras el empuje de borde 2·k_sep (F6): cobertura central 0,794 frente a 0,779 (p = 0,006) ✓; persecución 1 frente a 4: 85 % / 100 % ✓; blanco quieto 95 % (sigue fuera por poco)
