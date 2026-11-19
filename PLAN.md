@@ -526,3 +526,7 @@ Render RGB y cerebros de visión por computador · puente ROS 2 o Crazyflie (el 
 1. ¿Se publica en GitHub (RoperaLabs) desde F0 o al llegar a v0.1.0?
 2. ¿Qué escala y perfil de dron usamos por defecto: exterior (`urbano` con `iris`) o interior (`interior` con `cf2`)?
 3. ¿Quieres la nota técnica RL-TR-2026-05 al cerrar v0.3.0?
+
+## 8. Estado
+
+- **v0.1.0 "Primer vuelo"** (2026-11-19): F0 a F4 cerradas. Aceptada con dos criterios por debajo del objetivo de F4: los cerebros reactivos llegan al 31 % (campo de potencial) y al 21 % (boids) en mixto con densidad 0,2 (objetivo 70 %), y el escenario de referencia va a 4,3x el tiempo real (objetivo 5x). El oráculo valida la tubería y la métrica (98 % de llegadas, distancia volada / óptima = 1,00). Detalle en `.ia/grafo/cerebros.md`.
