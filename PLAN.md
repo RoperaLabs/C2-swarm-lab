@@ -530,3 +530,4 @@ Render RGB y cerebros de visión por computador · puente ROS 2 o Crazyflie (el 
 ## 8. Estado
 
 - **v0.1.0 "Primer vuelo"** (2026-11-19): F0 a F4 cerradas. Aceptada con dos criterios por debajo del objetivo de F4: los cerebros reactivos llegan al 31 % (campo de potencial) y al 21 % (boids) en mixto con densidad 0,2 (objetivo 70 %), y el escenario de referencia va a 4,3x el tiempo real (objetivo 5x). El oráculo valida la tubería y la métrica (98 % de llegadas, distancia volada / óptima = 1,00). Detalle en `.ia/grafo/cerebros.md`.
+- **F5 misiones** (2026-11-19): A→B con regret, cobertura medida por el arnés, persecución y estación de tierra. Cumple el oráculo (regret +0,019), la cobertura central frente a aleatoria (p = 0,011) y la persecución 1 frente a 4 (80 % / 100 %). Por debajo: blanco quieto capturado al 95 % (objetivo 100 %). Detalle en `.ia/grafo/misiones.md`.

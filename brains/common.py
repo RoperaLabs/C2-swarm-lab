@@ -61,3 +61,15 @@ TAKEOFF = 1.5   # m above the take-off point before a baseline starts its manoeu
 def climbing(p):
     """Action velocity for the take-off phase, or None once airborne enough."""
     return (0.0, 0.0, 1.0) if p[2] < TAKEOFF else None
+
+
+def detections(obs, R, min_conf=0.7):
+    """Latest confident detector rows as local-frame vectors (k, 3), ranges (k,) and classes (k,): 0 = own team,
+    1 = other. Rows under `min_conf` (the detector's false alarms report low confidence) are dropped."""
+    r = obs.readings.get("detector")
+    rows = r[-1].data[r[-1].data[:, 4] >= min_conf] if r and len(r[-1].data) else np.empty((0, 5))
+    if not len(rows):
+        return np.empty((0, 3)), np.empty(0), np.empty(0)
+    az, el, rng_m, cls = (rows[:, k] for k in range(4))
+    rel = (np.c_[np.cos(el) * np.cos(az), np.cos(el) * np.sin(az), np.sin(el)] * rng_m[:, None]) @ R.T
+    return rel, rng_m, cls

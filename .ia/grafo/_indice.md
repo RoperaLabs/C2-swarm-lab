@@ -11,7 +11,7 @@ Banco de pruebas 3D para algoritmos C2 de enjambres de drones. Plan completo: `P
 | fisica | F2 | .ia/grafo/fisica.md | hecho |
 | sensores | F3 | .ia/grafo/sensores.md | hecho |
 | cerebros | F4 | .ia/grafo/cerebros.md | hecho (2 criterios fuera) |
-| misiones | F5 | .ia/grafo/misiones.md | pendiente |
+| misiones | F5 | .ia/grafo/misiones.md | hecho (1 criterio al 95 %) |
 | lotes-visor | F6 | .ia/grafo/lotes-visor.md | pendiente |
 | grace | F7 | .ia/grafo/grace.md | pendiente |
 

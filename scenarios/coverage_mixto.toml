@@ -1,0 +1,27 @@
+# Coverage with central C2: a ground station splits the mixed arena into strips, ten iris sweep them with a lidar.
+
+[scenario]
+name = "coverage_mixto"
+seed = 0
+duration_s = 150
+mission = "coverage"
+
+[world]
+biome = "mixto"
+density = 0.1
+
+[radio]
+profile = "ideal"
+
+[ground_station]
+brain = "brains.central_assign:CentralAssign"
+
+[[team]]
+name = "azul"
+count = 10
+brain = "brains.sector_sweep:SectorSweep"
+launch_s = 1.0
+sensors.lidar = { channels = 8, hres_deg = 4.0, range_m = 20.0 }
+sensors.tof = { arrays = ["front", "left", "right", "back"] }
+sensors.pose = { profile = "ekf" }
+sensors.detector = { fov_deg = 360, range_m = 15 }

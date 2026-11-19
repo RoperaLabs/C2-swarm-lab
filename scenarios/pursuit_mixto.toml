@@ -1,0 +1,34 @@
+# Pursuit: four pursuers launched at A hunt one evader that starts at B and flees what it sees.
+
+[scenario]
+name = "pursuit_mixto"
+seed = 0
+duration_s = 120
+mission = "pursuit"
+
+[world]
+biome = "mixto"
+density = 0.1
+
+[radio]
+profile = "ideal"
+
+[[team]]
+name = "cazadores"
+count = 4
+role = "pursuer"
+brain = "brains.pursue:Pursue"
+launch_s = 1.0
+sensors.tof = { arrays = ["front", "left", "right", "back", "up", "down"] }
+sensors.pose = { profile = "ekf" }
+sensors.detector = { fov_deg = 360, range_m = 30 }
+
+[[team]]
+name = "presa"
+count = 1
+role = "evader"
+brain = "brains.flee:Flee"
+brain_params = { speed = 3.0 }
+sensors.tof = { arrays = ["front", "left", "right", "back", "up", "down"] }
+sensors.pose = { profile = "ekf" }
+sensors.detector = { fov_deg = 360, range_m = 30 }

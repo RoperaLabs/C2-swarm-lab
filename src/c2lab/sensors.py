@@ -76,6 +76,8 @@ class Sensors:
         self.buf = [{k: [] for k in self.cfg} for _ in range(n)]
         self.capacity = CAPACITY_J.get(profile, 1.0)
         self._rays = {}
+        self.hits = None                      # list: the coverage mission collects ray hit points here
+        self.peers, self.g0 = None, 0          # peers() -> (p, alive, labels) of every drone in the run
         if "tof" in self.cfg:
             c = self.cfg["tof"]
             d = _pinhole(c["zones"], c["zones"], c["fov_deg"], c["fov_deg"], c["sub"])
@@ -130,6 +132,12 @@ class Sensors:
                 self._put(name, t, getattr(self, "_" + name)())
 
     # --- ray sensors -------------------------------------------------------------------------------------------
+    def _crowd(self):
+        """Positions, liveness and team labels of every drone the sensors can see, and this team's offset."""
+        if self.peers is None:
+            return self.drones.p, self.drones.alive, self.labels, 0
+        return (*self.peers(), self.g0)
+
     def _cast(self, local, rng_m):
         d = self.drones
         sh = local.shape[:-1]
@@ -139,8 +147,12 @@ class Sensors:
         o = np.repeat(d.p, len(flat), 0)
         dirs = np.ascontiguousarray(dirs.reshape(-1, 3))
         dist, _, _ = self.world.raycast(o, dirs, rng_m)
-        owner = np.repeat(np.arange(self.n), len(flat))          # other drones of the team are spheres to the sensor
-        sphere_hits(o, dirs, owner, np.ascontiguousarray(d.p), d.alive, d.prof.radius, dist)
+        P, A, _, off = self._crowd()                             # other drones are spheres to the sensor
+        owner = np.repeat(np.arange(self.n), len(flat)) + off
+        sphere_hits(o, dirs, owner, np.ascontiguousarray(P), A, d.prof.radius, dist)
+        if self.hits is not None:
+            ok = np.isfinite(dist)
+            self.hits.append(o[ok] + dirs[ok] * dist[ok][:, None])
         return dist.reshape((self.n,) + sh)
 
     def _noisy(self, name, dist, sigma, lo, hi, dropout=0.0):
@@ -174,25 +186,26 @@ class Sensors:
         c, d = self.cfg["detector"], self.drones
         R = d.model.R if hasattr(d.model, "R") else quat_to_R(d.q)
         half = math.radians(c["fov_deg"] / 2)
+        P, A, L, off = self._crowd()
         out = []
         for i in range(self.n):
             r, rows = self.rng["detector"][i], []
-            others = [j for j in range(self.n) if j != i and d.alive[j]]
+            others = [j for j in range(len(P)) if j != off + i and A[j]]
             if others and d.alive[i]:
-                rel = (d.p[others] - d.p[i]) @ R[i]                                   # body frame
+                rel = (P[others] - d.p[i]) @ R[i]                                     # body frame
                 dist = np.linalg.norm(rel, axis=1)
                 ang = np.arccos(np.clip(rel[:, 0] / np.maximum(dist, 1e-9), -1, 1))
                 cand = np.flatnonzero((dist <= c["range_m"]) & (ang <= half))
                 if cand.size:
                     js = np.array(others)[cand]
-                    vis = self.world.segment_crossings(np.repeat(d.p[i][None], len(js), 0), d.p[js]) == 0
+                    vis = self.world.segment_crossings(np.repeat(d.p[i][None], len(js), 0), P[js]) == 0
                     for k, j in zip(cand[vis], js[vis]):
                         if r.random() > c["p_detect"]:
                             continue
                         x, y, z = rel[k]
                         az = math.atan2(y, x) + r.normal(0, math.radians(c["sigma_deg"]))
                         el = math.atan2(z, math.hypot(x, y)) + r.normal(0, math.radians(c["sigma_deg"]))
-                        cls = float(self.labels[j] != self.labels[i])
+                        cls = float(L[j] != self.labels[i])
                         if r.random() < c["p_confuse"]:
                             cls = 1.0 - cls
                         rows.append((az, el, dist[k] * (1 + r.normal(0, c["sigma_rel"])), cls, c["p_detect"]))
