@@ -1,4 +1,4 @@
-# Reference scenario: ten drones cross an urban block from A to B (PLAN.md §2.5).
+# Reference scenario: ten drones cross an urban block from A to B.
 
 [scenario]
 name = "ab_urbano_10"

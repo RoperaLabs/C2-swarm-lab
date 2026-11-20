@@ -109,7 +109,6 @@ with the world. Teammates as physical obstacles break it too. To test a new GRAC
 | `scenarios/` | TOML scenarios and sweeps |
 | `benchmarks/` | Studies built on sweeps (the GRACE ladder) |
 | `viewer/` | Browser replay and live viewer |
-| `PLAN.md` | Phases F0 to F7, acceptance criteria and status (in Spanish) |
 
 ## Conventions
 

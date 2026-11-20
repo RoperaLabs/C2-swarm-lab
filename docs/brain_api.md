@@ -20,8 +20,24 @@ sensors.tof = { arrays = ["front", "left", "right"] }
   `mission` (`goal_local`: the goal in the local frame, ENU axes anchored at the take-off point; `goal_enu` only with
   GNSS on).
 - `step(obs: Observation)` at `brain_hz`: `obs.t`, `obs.readings[sensor]` (a tuple of `Reading(t, data)` since the
-  last step, oldest first, read-only arrays; formats in `.ia/grafo/_indice.md`) and `obs.inbox` (`Packet(src, data,
+  last step, oldest first, read-only arrays; formats below) and `obs.inbox` (`Packet(src, data,
   rssi_dbm, range_m)` received since the last step).
+
+## Reading formats
+
+| Sensor | `Reading.data` |
+|---|---|
+| `tof` | `(arrays, zones, zones)` distances in m; NaN for no target or dropout |
+| `lidar` | `(channels, azimuths)` distances in m |
+| `depth` | `(height, width)` depth along the optical axis in m |
+| `detector` | `(k, 5)` rows of azimuth, elevation (rad, body frame), distance (m), class (0 same team, 1 other team), confidence |
+| `pose` | `(13,)` position and velocity in the local frame, quaternion (w, x, y, z), angular rate in the body frame |
+| `imu` | `(6,)` specific force (m/s²) and angular rate (rad/s), body frame |
+| `gnss` | `(6,)` ENU position and velocity; NaN without a fix |
+| `baro` | `()` height above the take-off point, m |
+| `mag` | `()` yaw, rad |
+| `prior_map` | `(nx, ny)` 2.5-D heights in m, delivered once at tick 0 |
+| `battery` | `()` state of charge, 0 to 1 |
 
 ## What a brain returns
 

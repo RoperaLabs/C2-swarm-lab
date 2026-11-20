@@ -1,4 +1,4 @@
-"""Scenario loading and validation (schema: .ia/grafo/cimientos.md)."""
+"""Scenario loading and validation."""
 import math
 import re
 import tomllib

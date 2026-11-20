@@ -1,4 +1,4 @@
-"""Procedural 3-D worlds and their geometric queries (contract WorldQuery in .ia/grafo/_indice.md)."""
+"""Procedural 3-D worlds and their geometric queries."""
 from .biomes import generate
 from .world import World
 

@@ -1,4 +1,4 @@
-// Static viewer for c2lab-world/1 files. Conventions: see .ia/grafo/mundo.md.
+// Static viewer for c2lab-world/1 files.
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 

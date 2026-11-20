@@ -1,4 +1,4 @@
-"""Deterministic multi-rate loop (PLAN.md §2.3). In each physics tick: brains (at their rate) -> radio slot ->
+"""Deterministic multi-rate loop. In each physics tick: brains (at their rate) -> radio slot ->
 physics with the estimator's errors -> sensors -> mission -> recording. Brains see only what `Sensors` and `Radio`
 hand them; a brain that raises goes to failsafe (land) and the run continues. Drone i of a team is launched (its
 brain starts) at i * launch_s. An optional ground station is one more radio node with its own brain and no body.
