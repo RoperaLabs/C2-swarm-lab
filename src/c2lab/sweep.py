@@ -19,6 +19,7 @@ import copy
 import csv
 import json
 import math
+import multiprocessing
 import os
 import traceback
 import shutil
@@ -109,7 +110,8 @@ def sweep(sc, root, workers=MAX_WORKERS, live=False):
     one = partial(_one, live=live)
     if workers == 1:
         return [one(j) for j in todo]
-    with ProcessPoolExecutor(workers) as ex:
+    # spawn on every OS: on Linux a fork after numba's OpenMP layer has started (prange kernels) kills the child
+    with ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("spawn")) as ex:
         return list(ex.map(one, todo))
 
 

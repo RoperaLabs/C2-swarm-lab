@@ -13,7 +13,7 @@ import argparse
 import json
 import math
 import sys
-from multiprocessing import Pool
+from multiprocessing import get_context
 from pathlib import Path
 
 import numpy as np
@@ -79,7 +79,7 @@ def main():
     if ref_path.exists():
         ref = {int(k): v for k, v in json.loads(ref_path.read_text(encoding="utf-8")).items()}
     else:
-        with Pool(a.workers) as pool:
+        with get_context("spawn").Pool(a.workers) as pool:
             ref = dict(pool.map(reference, seeds))
         ref_path.write_text(json.dumps(ref, indent=1), encoding="utf-8")
 

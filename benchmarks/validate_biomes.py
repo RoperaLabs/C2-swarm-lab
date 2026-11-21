@@ -1,5 +1,6 @@
 """Biome acceptance over many seeds (<= 5 processes, one numba thread each): feasibility, distinct hashes, attempts,
 time, and plan-view cover against the target density."""
+import multiprocessing
 import os
 
 os.environ["NUMBA_NUM_THREADS"] = "1"
@@ -24,7 +25,7 @@ def one(job):
 if __name__ == "__main__":
     jobs = [(b, 0.2, s) for b in sorted(BIOMES) for s in range(SEEDS)]
     jobs += [(b, d, s) for b in sorted(BIOMES) for d in DENSITIES if d != 0.2 for s in range(DSEEDS)]
-    with ProcessPoolExecutor(5) as ex:
+    with ProcessPoolExecutor(5, mp_context=multiprocessing.get_context("spawn")) as ex:
         res = list(ex.map(one, jobs, chunksize=4))
     for b in sorted(BIOMES):
         main = [r for r in res if r[0][0] == b and r[0][1] == 0.2]

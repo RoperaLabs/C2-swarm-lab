@@ -2,6 +2,7 @@
 - a_to_b: the privileged oracle's regret (flown / shortest - 1) stays within 0.05;
 - coverage: central C2 (ground station + sector sweep) against random walk, paired Wilcoxon;
 - pursuit: a stationary evader is always caught; a fleeing one is caught less often by 1 pursuer than by 4."""
+import multiprocessing
 import os
 import sys
 
@@ -42,7 +43,7 @@ def job(args):
 
 if __name__ == "__main__":
     kinds = sys.argv[1:] or ["oracle", "cover_central", "cover_random", "still", "flee1", "flee4"]
-    with ProcessPoolExecutor(5) as ex:
+    with ProcessPoolExecutor(5, mp_context=multiprocessing.get_context("spawn")) as ex:
         res = list(ex.map(job, [(k, s) for k in kinds for s in SEEDS]))
     m = {k: [r[2] for r in res if r[0] == k] for k in kinds}
     if "oracle" in m:
