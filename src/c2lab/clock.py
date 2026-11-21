@@ -13,7 +13,7 @@ from c2lab.scenario import PHYSICS_HZ
 
 MODES = ("fast", "realtime", "paused")
 MIN_SLEEP_S = 0.002     # realtime: sleep only when at least this far ahead (fewer, longer sleeps)
-MAX_LAG_S = 0.1         # realtime: further behind than this, re-anchor instead of catching up in a burst
+MAX_LAG_S = 0.1         # realtime: a loop that falls behind keeps at most this much to catch up (no long burst)
 WINDOW_S = 1.0          # wall seconds over which the real-time factor is measured
 
 
@@ -60,11 +60,13 @@ class RunClock:
                     self._budget -= 1
         now = time.perf_counter()
         if self.mode == "realtime":
+            if self._anchor is None:
+                self._anchor = (now, tick)
             a = self._anchor
-            if a is None or now - (a[0] + (tick - a[1]) / (PHYSICS_HZ * self.factor)) > MAX_LAG_S:
-                a = self._anchor = (now, tick)
             ahead = a[0] + (tick - a[1]) / (PHYSICS_HZ * self.factor) - now
-            if ahead > MIN_SLEEP_S:
+            if ahead < -MAX_LAG_S:          # slower than the factor: never sleep, and cap the backlog
+                self._anchor = (now - MAX_LAG_S, tick)
+            elif ahead > MIN_SLEEP_S:
                 time.sleep(ahead)
                 now = time.perf_counter()
         if self.t0 is None:

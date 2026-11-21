@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from c2lab import clock as clock_module
 from c2lab.clock import RunClock
 from c2lab.scenario import parse
 from c2lab.sim import run
@@ -72,6 +73,29 @@ def test_pause_step_and_resume_keep_the_hash(fast_hash):
     clock.fast()
     th.join(30)
     assert out["hash"] == fast_hash and clock.stats()["ticks"] == 600
+
+
+class FakeTime:
+    def __init__(self):
+        self.now, self.slept = 0.0, 0.0
+
+    def perf_counter(self):
+        return self.now
+
+    def sleep(self, s):
+        self.now += s
+        self.slept += s
+
+
+def test_realtime_never_idles_when_behind(monkeypatch):
+    """A loop slower than the factor runs flat out: heavy sensor ticks never leave the cheap ones sleeping."""
+    ft = FakeTime()
+    monkeypatch.setattr(clock_module, "time", ft)
+    clock = RunClock("realtime", 10.0)                    # 83 us per tick
+    for tick in range(12000):
+        clock.wait(tick)
+        ft.now += 40e-6 if tick % 80 else 8e-3            # 140 us per tick on average
+    assert ft.slept == 0.0
 
 
 def test_bad_mode_and_factor():
