@@ -4,6 +4,7 @@ RealSense D435, BMI088, u-blox M10, BMP388); every one can be overridden in the 
 import math
 
 import numpy as np
+from numba import njit
 
 from c2lab.brain import Reading
 from c2lab.physics.profiles import G
@@ -144,16 +145,16 @@ class Sensors:
         flat = local.reshape(-1, 3)
         R = d.model.R if hasattr(d.model, "R") else quat_to_R(d.q)
         dirs = np.matmul(R, flat.T).transpose(0, 2, 1)
-        o = np.repeat(d.p, len(flat), 0)
+        o = np.ascontiguousarray(d.p)
         dirs = np.ascontiguousarray(dirs.reshape(-1, 3))
-        dist, _, _ = self.world.raycast(o, dirs, rng_m)
+        dist = self.world.cast(o, dirs, rng_m)
         if drones:                                               # other drones are spheres to the sensor
             P, A, _, off = self._crowd()
-            owner = np.repeat(np.arange(self.n), len(flat)) + off
-            sphere_hits(o, dirs, owner, np.ascontiguousarray(P), A, d.prof.radius, dist)
+            far = np.inf if self.hits is not None else float(rng_m)    # beyond the range only coverage sees a hit
+            sphere_hits(o, dirs, len(flat), off, np.ascontiguousarray(P), A, d.prof.radius, far, dist)
         if self.hits is not None:
             ok = np.isfinite(dist)
-            self.hits.append(o[ok] + dirs[ok] * dist[ok][:, None])
+            self.hits.append(np.repeat(o, len(flat), 0)[ok] + dirs[ok] * dist[ok][:, None])
         return dist.reshape((self.n,) + sh)
 
     def _noisy(self, name, dist, sigma, lo, hi, dropout=0.0):
@@ -184,36 +185,44 @@ class Sensors:
 
     # --- detector ----------------------------------------------------------------------------------------------
     def _detector(self):
+        """Per drone, the others in range and FoV (body frame); then one line-of-sight query for all of them; then the
+        noisy detections, drawn by `_detect` exactly as the per-candidate Python loop of v0.3.0 drew them."""
         c, d = self.cfg["detector"], self.drones
         R = d.model.R if hasattr(d.model, "R") else quat_to_R(d.q)
         half = math.radians(c["fov_deg"] / 2)
         P, A, L, off = self._crowd()
-        out = []
+        everyone, cands = np.arange(len(P)), {}
         for i in range(self.n):
-            r, rows = self.rng["detector"][i], []
-            others = [j for j in range(len(P)) if j != off + i and A[j]]
-            if others and d.alive[i]:
+            others = np.flatnonzero(A & (everyone != off + i))
+            if len(others) and d.alive[i]:
                 rel = (P[others] - d.p[i]) @ R[i]                                     # body frame
                 dist = np.linalg.norm(rel, axis=1)
                 ang = np.arccos(np.clip(rel[:, 0] / np.maximum(dist, 1e-9), -1, 1))
                 cand = np.flatnonzero((dist <= c["range_m"]) & (ang <= half))
                 if cand.size:
-                    js = np.array(others)[cand]
-                    vis = self.world.segment_crossings(np.repeat(d.p[i][None], len(js), 0), P[js]) == 0
-                    for k, j in zip(cand[vis], js[vis]):
-                        if r.random() > c["p_detect"]:
-                            continue
-                        x, y, z = rel[k]
-                        az = math.atan2(y, x) + r.normal(0, math.radians(c["sigma_deg"]))
-                        el = math.atan2(z, math.hypot(x, y)) + r.normal(0, math.radians(c["sigma_deg"]))
-                        cls = float(L[j] != self.labels[i])
-                        if r.random() < c["p_confuse"]:
-                            cls = 1.0 - cls
-                        rows.append((az, el, dist[k] * (1 + r.normal(0, c["sigma_rel"])), cls, c["p_detect"]))
-            for _ in range(r.poisson(c["false_rate"])):
-                rows.append((r.uniform(-half, half), r.uniform(-half, half), r.uniform(0, c["range_m"]),
-                             float(r.integers(2)), r.uniform(0.3, 0.6)))
-            out.append(np.array(rows, float).reshape(-1, 5))
+                    cands[i] = (rel[cand], dist[cand], others[cand])
+        if cands:
+            js = np.concatenate([x[2] for x in cands.values()])
+            vis = self.world.segment_crossings(np.repeat(d.p[list(cands)], [len(x[2]) for x in cands.values()], 0),
+                                               P[js]) == 0
+            vis = np.split(vis, np.cumsum([len(x[2]) for x in cands.values()])[:-1])
+            for (i, (rel, dist, js)), v in zip(list(cands.items()), vis):
+                cands[i] = (rel[v], dist[v], js[v])
+        s_ang = math.radians(c["sigma_deg"])
+        out = []
+        for i in range(self.n):
+            r, rows = self.rng["detector"][i], []
+            if i in cands:
+                rel, dist, js = cands[i]
+                x, y, z = (rel[:, a].tolist() for a in range(3))
+                az = np.array([math.atan2(b, a) for a, b in zip(x, y)])
+                el = np.array([math.atan2(h, math.hypot(a, b)) for a, b, h in zip(x, y, z)])
+                cls = (L[js] != self.labels[i]).astype(float)
+                rows.append(_detect(r, az, el, dist, cls, float(c["p_detect"]), s_ang, float(c["sigma_rel"]),
+                                    float(c["p_confuse"])))
+            alarms = [(r.uniform(-half, half), r.uniform(-half, half), r.uniform(0, c["range_m"]), float(r.integers(2)),
+                       r.uniform(0.3, 0.6)) for _ in range(r.poisson(c["false_rate"]))]
+            out.append(np.concatenate(rows + [np.array(alarms, float).reshape(-1, 5)]))
         return out
 
     # --- state estimation --------------------------------------------------------------------------------------
@@ -309,3 +318,23 @@ class Sensors:
         dist, _, _ = w.raycast(o, np.tile([0.0, 0.0, -1.0], (X.size, 1)), hi[2] + 2)
         height = np.where(np.isfinite(dist), o[:, 2] - dist, w.ground(o[:, :2]))
         return (height + self.rng["prior_map"][i].normal(0, c["sigma"], X.size)).reshape(X.shape)
+
+
+@njit(cache=True)
+def _detect(r, az, el, rng, cls, p_detect, s_ang, s_rel, p_confuse):
+    """Detections of the visible candidates (rows of `Reading.data`). Draws from r in the order of v0.3.0: detected?,
+    azimuth, elevation, confusion, range; numba's Generator draws exactly what numpy's draws from the same state."""
+    out = np.empty((len(az), 5))
+    m = 0
+    for k in range(len(az)):
+        if r.random() > p_detect:
+            continue
+        out[m, 0] = az[k] + r.normal(0.0, s_ang)
+        out[m, 1] = el[k] + r.normal(0.0, s_ang)
+        out[m, 3] = cls[k]
+        if r.random() < p_confuse:
+            out[m, 3] = 1.0 - cls[k]
+        out[m, 2] = rng[k] * (1 + r.normal(0.0, s_rel))
+        out[m, 4] = p_detect
+        m += 1
+    return out[:m]

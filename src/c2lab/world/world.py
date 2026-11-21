@@ -76,7 +76,7 @@ class World:
         cx, cy = (hi[0] - lo[0]) / (H.shape[0] - 1), (hi[1] - lo[1]) / (H.shape[1] - 1)
         lx = np.abs(np.diff(H, axis=0)).max(initial=0.0) / cx
         ly = np.abs(np.diff(H, axis=1)).max(initial=0.0) / cy
-        self._H, self._g = H, np.array([lo[0], lo[1], cx, cy, 1 / math.sqrt(1 + lx * lx + ly * ly)])
+        self._H, self._g = H, np.array([lo[0], lo[1], cx, cy, 1 / math.sqrt(1 + lx * lx + ly * ly), float(not H.any())])
         self._build_grid()
 
     def _build_grid(self):
@@ -128,6 +128,15 @@ class World:
         dist, prim, normal = np.empty(len(o)), np.empty(len(o), np.int64), np.empty((len(o), 3))
         K.raycast(self._T, self._P, self._AB, self._H, self._g, o, d, r, dist, prim, normal)
         return dist, prim, normal
+
+    def cast(self, o, d, max_range):
+        """First-hit distance (inf for none) of rays grouped by origin: o (n, 3), d (n * k, 3) unit, ray j starts at
+        o[j // k]. The distances of `raycast`, without primitive ids or normals."""
+        o = np.ascontiguousarray(o, float).reshape(-1, 3)
+        d = np.ascontiguousarray(d, float).reshape(-1, 3)
+        dist = np.empty(len(d))
+        K.cast(self._T, self._P, self._AB, self._H, self._g, o, d, len(d) // max(len(o), 1), float(max_range), dist)
+        return dist
 
     def segment_crossings(self, a, b):
         a = np.ascontiguousarray(a, float).reshape(-1, 3)

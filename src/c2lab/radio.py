@@ -75,13 +75,25 @@ class Radio:
         return q, rx, d
 
     def slot(self, p, alive):
-        """Deliver what was queued before the previous slot; returns one inbox (list of Packet) per node."""
+        """Deliver what was queued before the previous slot; returns one inbox (list of Packet) per node.
+
+        One uniform draw per (packet, receiver other than the sender), in sender, packet and receiver order. Without
+        ranging a broadcast takes its draws in one call, which yields the same numbers, and shares one Packet among
+        its receivers when the profile has no received power (Packet is immutable)."""
         out, self._inflight, self.queue = self._inflight, self.queue, [[] for _ in range(self.n)]
         airtime = np.array([8 * sum(len(x) for _, x in q) for q in out]) / (self.dil["rate_bps"] * self.dt)
         prob, rx, d = self._links(np.asarray(p, float), np.asarray(alive, bool), airtime)
         inbox = [[] for _ in range(self.n)]
         for j, packets in enumerate(out):
             for dest, data in packets:
+                if dest is None and not self.ranging:
+                    to = np.delete(np.arange(self.n), j)
+                    to = to[self.rng.random(len(to)) < prob[to, j]]
+                    shared = Packet(j, data, 0.0) if self.profile != "dil_v02" else None
+                    for i in to.tolist():
+                        inbox[i].append(shared or Packet(j, data, float(rx[i, j])))
+                    self.delivered[to] += len(data)
+                    continue
                 for i in (range(self.n) if dest is None else [dest]):
                     if i != j and self.rng.random() < prob[i, j]:
                         rng_m = d[i, j] + self.rng.normal(0, RANGE_SIGMA) if self.ranging else None

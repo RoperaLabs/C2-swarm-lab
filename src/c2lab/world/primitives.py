@@ -57,7 +57,7 @@ def prim_sdf(t, row, x, y, z):
 
 @njit(cache=True)
 def ground_h(H, g, x, y):
-    """Bilinear terrain height; g = (x0, y0, cell_x, cell_y, 1/sqrt(1+L^2))."""
+    """Bilinear terrain height; g = (x0, y0, cell_x, cell_y, 1/sqrt(1+L^2), 1 if every height is 0)."""
     nx, ny = H.shape
     fx = min(max((x - g[0]) / g[2], 0.0), nx - 1.0)
     fy = min(max((y - g[1]) / g[3], 0.0), ny - 1.0)
@@ -75,6 +75,8 @@ def ground_points(H, g, xy, out):
 
 @njit(cache=True)
 def terr_sdf(H, g, x, y, z):
+    if g[5] != 0.0:     # flat terrain at height 0: the bilinear height is exactly 0 and g[4] is 1, so this is exact
+        return z
     return (z - ground_h(H, g, x, y)) * g[4]
 
 
@@ -196,16 +198,67 @@ def crossings(T, P, AB, H, g, A, B, out):
 
 
 @njit(parallel=True, cache=True)
-def sphere_hits(O, D, owner, C, alive, r, dist):
-    """Lower dist[k] to the first hit of ray k on any live sphere (centre C[j], radius r) other than its owner."""
-    for k in prange(len(O)):
-        for j in range(len(C)):
-            if j == owner[k] or not alive[j]:
-                continue
-            ox, oy, oz = C[j, 0] - O[k, 0], C[j, 1] - O[k, 1], C[j, 2] - O[k, 2]
-            b = D[k, 0] * ox + D[k, 1] * oy + D[k, 2] * oz
-            disc = b * b - (ox * ox + oy * oy + oz * oz) + r * r
-            if disc >= 0.0:
-                t = b - math.sqrt(disc)
-                if 0.0 <= t < dist[k]:
+def cast(T, P, AB, H, g, O, D, K, rng, dist):
+    """First-hit distance of sensor rays grouped by origin: ray k starts at O[k // K] along the unit D[k] and goes up to
+    rng; inf for no hit. The trace of `raycast` bit for bit, without normals and with the candidate primitives
+    pre-filtered once per origin by the box that holds all of its rays."""
+    n = len(T)
+    m = rng * (1.0 + 1e-9) + 1e-9
+    for i in prange(len(O)):
+        pre, cand = np.empty(n, np.int64), np.empty(n, np.int64)
+        ox, oy, oz = O[i, 0], O[i, 1], O[i, 2]
+        npre = 0
+        for q in range(n):
+            if _overlap(AB[q], ox - m, oy - m, oz - m, ox + m, oy + m, oz + m):
+                pre[npre] = q
+                npre += 1
+        for k in range(i * K, (i + 1) * K):
+            dx, dy, dz = D[k, 0], D[k, 1], D[k, 2]
+            ex, ey, ez = ox + dx * rng, oy + dy * rng, oz + dz * rng
+            nc = 0
+            for q in range(npre):
+                if _overlap(AB[pre[q]], min(ox, ex), min(oy, ey), min(oz, ez), max(ox, ex), max(oy, ey), max(oz, ez)):
+                    cand[nc] = pre[q]
+                    nc += 1
+            dist[k] = np.inf
+            t = 0.0
+            for it in range(MAX_IT):
+                x, y, z = ox + dx * t, oy + dy * t, oz + dz * t
+                best = terr_sdf(H, g, x, y, z)
+                for j in range(nc):
+                    s = prim_sdf(T[cand[j]], P[cand[j]], x, y, z)
+                    if s < best:
+                        best = s
+                if it == 0 and best < 0.0:
+                    dist[k] = 0.0
+                    break
+                if best < EPS:
                     dist[k] = t
+                    break
+                t += best
+                if t > rng:
+                    break
+
+
+@njit(parallel=True, cache=True)
+def sphere_hits(O, D, K, owner0, C, alive, r, cap, dist):
+    """Lower dist[k] to the first hit of ray k on any live sphere (centre C[j], radius r) other than its owner. Rays are
+    grouped by origin: ray k starts at O[k // K] and belongs to sphere owner0 + k // K. Spheres farther than cap + r
+    from the origin are skipped, since no ray can hit them within cap (cap = inf tests them all)."""
+    reach = (cap + r + 1e-3) ** 2
+    rr = r * r
+    for i in prange(len(O)):
+        for j in range(len(C)):
+            if j == owner0 + i or not alive[j]:
+                continue
+            ox, oy, oz = C[j, 0] - O[i, 0], C[j, 1] - O[i, 1], C[j, 2] - O[i, 2]
+            cc = ox * ox + oy * oy + oz * oz
+            if cc > reach:
+                continue
+            for k in range(i * K, (i + 1) * K):
+                b = D[k, 0] * ox + D[k, 1] * oy + D[k, 2] * oz
+                disc = b * b - cc + rr
+                if disc >= 0.0:
+                    t = b - math.sqrt(disc)
+                    if 0.0 <= t < dist[k]:
+                        dist[k] = t
