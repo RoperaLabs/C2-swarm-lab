@@ -42,6 +42,9 @@ One run, saved with its replay:
 .venv/Scripts/python -m c2lab serve                      # then open the viewer URL the run printed
 ```
 
+A run goes as fast as it can. `--realtime F` paces it at F times real time (0.1 to 10), for example to follow it live
+with `--live`; pacing never changes the result.
+
 A paired sweep and its statistics:
 
 ```bash
@@ -107,13 +110,13 @@ with the world. Teammates as physical obstacles break it too. To test a new GRAC
 | `src/c2lab/` | Simulator: `world/` (biomes, raycast, oracle), `physics/` (quadrotor, point mass, autopilot), `sensors.py`, `radio.py`, `missions.py`, `sim.py`, `sweep.py`, CLI |
 | `brains/` | Baseline brains and the GRACE adapter; `privileged/` holds the oracle |
 | `scenarios/` | TOML scenarios and sweeps |
-| `benchmarks/` | Studies built on sweeps (the GRACE ladder) |
+| `benchmarks/` | Studies built on sweeps (the GRACE ladder) and the throughput benchmark (`perf.py`, [`docs/performance.md`](docs/performance.md)) |
 | `viewer/` | Browser replay and live viewer |
 
 ## Conventions
 
 SI units throughout. The world frame is ENU and the body frame FLU (REP-103); quaternions are (w, x, y, z). Time runs in
-integer physics ticks, at 1200 Hz by default. All randomness comes from `c2lab.seeds.rng(seed, *path)`, so a run is
+integer physics ticks at a fixed 1200 Hz. All randomness comes from `c2lab.seeds.rng(seed, *path)`, so a run is
 fully determined by its scenario and seed.
 
 ## License

@@ -1,0 +1,20 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[test,grace]"
+      - run: pytest -q
+      # Performance regression against benchmarks/perf_baseline.json: a gate on the baseline's platform, a report
+      # elsewhere (a shared runner is not the reference laptop).
+      - run: python benchmarks/perf.py --check
+        env:
+          NUMBA_NUM_THREADS: "1"

@@ -23,7 +23,7 @@ import os
 import platform
 import sys
 import time
-from importlib.metadata import version
+import tomllib
 from pathlib import Path
 
 os.environ["NUMBA_NUM_THREADS"] = "1"           # before numba is imported
@@ -46,7 +46,7 @@ SCENARIO = "scenarios/ab_mixto.toml"
 BASELINE = ROOT / "benchmarks" / "perf_baseline.json"
 CURVE = [(n, dyn, sens) for sens in ("on", "off") for dyn in ("quad", "pointmass") for n in (1, 10, 50, 100)]
 CHECK = [(10, "quad", "on"), (50, "quad", "on"), (50, "pointmass", "off")]
-WINDOW_S = {1: 30.0, 10: 15.0, 50: 6.0, 100: 4.0}    # timed simulated seconds per run
+WINDOW_S = {1: 120.0, 10: 15.0, 50: 6.0, 100: 4.0}   # timed simulated seconds per run
 WARMUP_S = 3.0
 REPS = 5
 TOLERANCE = 0.15                                 # --check fails below (1 - TOLERANCE) x the baseline rate
@@ -143,6 +143,15 @@ def machine():
             "numpy": np.__version__, "numba": numba.__version__}
 
 
+def document(results, conditions=""):
+    """The c2lab-perf/1 record of a set of results; `conditions` notes what the platform does not say (power...)."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    return {"format": "c2lab-perf/1", "version": project["version"], "date": time.strftime("%Y-%m-%d"),
+            "platform": machine(), "conditions": conditions, "scenario": SCENARIO,
+            "seed": load(ROOT / SCENARIO)["scenario"]["seed"], "warmup_s": WARMUP_S, "numba_threads": 1,
+            "results": results}
+
+
 HEAD = (f"{'N':>4} {'dynamics':<9} {'sensors':<7} {'drones*tick/s':>17} {'CV':>6} {'x real':>7}  "
         + " ".join(f"{k:>7}" for k in (*PHASES, "rest")) + "  alive")
 
@@ -159,6 +168,7 @@ def main():
     ap.add_argument("--check", action="store_true", help="compare the regression set with the baseline")
     ap.add_argument("--reps", type=int, default=REPS)
     ap.add_argument("--out", help="also write the results to this JSON file")
+    ap.add_argument("--note", default="", help="measuring conditions to record (power source, CPU limits...)")
     a = ap.parse_args()
     instrument()
     base = json.loads(BASELINE.read_text(encoding="utf-8")) if a.check else None
@@ -169,19 +179,18 @@ def main():
     for cfg in (CHECK if a.check else CURVE):
         results.append(measure(*cfg, a.reps))
         print(row(results[-1]), flush=True)
-    doc = {"format": "c2lab-perf/1", "version": version("c2-swarm-lab"), "date": time.strftime("%Y-%m-%d"),
-           "platform": machine(), "scenario": SCENARIO, "seed": load(ROOT / SCENARIO)["scenario"]["seed"],
-           "warmup_s": WARMUP_S, "numba_threads": 1, "results": results}
-    for path in [BASELINE] * a.save + [Path(a.out)] * bool(a.out):
+    doc = document(results, a.note)
+    for path in ([BASELINE] if a.save else []) + ([Path(a.out)] if a.out else []):
         path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
     if a.check:
         same = {k: base["platform"][k] for k in ("system", "machine", "processor", "cpus")} == \
                {k: doc["platform"][k] for k in ("system", "machine", "processor", "cpus")}
         ref = {(r["n"], r["dynamics"], r["sensors"]): r["rate_mean"] for r in base["results"]}
+        print(f"baseline {base['version']} of {base['date']}: {base.get('conditions') or 'no conditions noted'}")
         slow = []
         for r in results:
             ratio = r["rate_mean"] / ref[r["n"], r["dynamics"], r["sensors"]]
-            print(f"{r['n']} {r['dynamics']} {r['sensors']}: {ratio:.2f} x baseline ({base['version']})")
+            print(f"{r['n']} {r['dynamics']} {r['sensors']}: {ratio:.2f} x baseline")
             slow += [r] * (ratio < 1 - TOLERANCE)
         if not same:
             print(f"baseline platform differs ({base['platform']['processor']}): report only")
