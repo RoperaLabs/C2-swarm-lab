@@ -1,7 +1,23 @@
-"""Deterministic multi-rate loop. In each physics tick: brains (at their rate) -> radio slot ->
-physics with the estimator's errors -> sensors -> mission -> recording. Brains see only what `Sensors` and `Radio`
-hand them; a brain that raises goes to failsafe (land) and the run continues. Drone i of a team is launched (its
-brain starts) at i * launch_s. An optional ground station is one more radio node with its own brain and no body.
+"""Deterministic multi-rate loop. Every physics tick k runs these phases in this order. The order is part of the
+determinism contract (a run's hash depends on it), and tests/test_tick_order.py fixes it:
+
+0. Delayed setpoints: on a team with command.latency_s > 0, the setpoints computed L = round(latency_s * 1200) ticks
+   ago take effect, unless their agent stopped working meanwhile (dead, failed brain or job over).
+1. On brain ticks: every working brain in agent order (observation -> action; with no latency the setpoint drives the
+   physics of this same tick, and the outbox goes to the radio), then the ground station, then the mission update,
+   which may order landings.
+2. On radio slots: the radio delivers what was put in flight at the previous slot, seeing the positions at the start
+   of the tick.
+3. Team by team, in scenario order: the team's physics (the autopilot flies on the estimator's errors), then its
+   sensors (stamp = t_k). Known asymmetry: a sensor that sees other drones sees those of its own and earlier teams
+   already moved this tick, and those of later teams not yet.
+4. On record ticks: the frame (p, q, alive) is recorded; the run hash covers these frames.
+5. On brain ticks: the run stops if the mission is finished or nobody is working, and no live drone is airborne.
+
+Brains see only what `Sensors` and `Radio` hand them; a brain that raises goes to failsafe (land) and the run
+continues. Drone i of a team is launched (its brain starts) at i * launch_s. An optional ground station is one more
+radio node with its own brain and no body. A `RunClock` paces the loop (fast by default) and never changes what is
+simulated.
 
 ponytail: drones of different teams do not collide with each other (each team has its own Drones); one Drones for all
 when a scenario mixes teams in close quarters.
@@ -9,10 +25,12 @@ when a scenario mixes teams in close quarters.
 import hashlib
 import importlib
 import time
+from collections import deque
 
 import numpy as np
 
 from c2lab.brain import AgentSpec, Observation, Velocity
+from c2lab.clock import RunClock
 from c2lab.missions import MISSIONS
 from c2lab.physics import PROFILES, Drones
 from c2lab.radio import Radio
@@ -45,8 +63,10 @@ def spawn_points(world, n, row, clear, anchor="A"):
     return np.c_[xy, world.ground(xy)]
 
 
-def run(sc, world=None, record=False, live=None):
-    """One run. With record=True, live(partial) is called every LIVE_S wall seconds with the run so far."""
+def run(sc, world=None, record=False, live=None, clock=None):
+    """One run, paced by `clock` (a RunClock; fast if None). With record=True, live(partial) is called every LIVE_S
+    wall seconds with the run so far."""
+    clock = clock or RunClock()
     s, rates = sc["scenario"], sc["scenario"]["rates_hz"]
     seed, phys = s["seed"], rates["physics"]
     w = world or generate(sc["world"]["biome"], sc["world"]["size_m"], sc["world"]["density"], seed)
@@ -65,7 +85,8 @@ def run(sc, world=None, record=False, live=None):
         brains = [load_brain(t["brain"], t["brain_params"]) for _ in range(n)]
         teams.append({"g0": g0, "n": n, "cfg": t, "drones": d, "sensors": sens, "brains": brains,
                       "privileged": bool(getattr(brains[0], "privileged", False)),
-                      "launch": np.arange(n) * t["launch_s"]})          # drone i waits launch_s * i on the ground
+                      "launch": np.arange(n) * t["launch_s"],           # drone i waits launch_s * i on the ground
+                      "lat": round(t["command"]["latency_s"] * phys), "pending": deque()})
         g0 += n
     N = g0
     homes = np.concatenate([t["drones"].p for t in teams])
@@ -110,6 +131,7 @@ def run(sc, world=None, record=False, live=None):
     cpu, steps, mem = np.zeros(N), np.zeros(N, int), np.zeros(N, int)
     events, frames, links = [], [], []
     live_at = time.perf_counter() + LIVE_S
+    delayed = [t for t in teams if t["lat"]]
 
     def all_of(attr):
         return np.concatenate([getattr(t["drones"], attr) for t in teams])
@@ -123,7 +145,15 @@ def run(sc, world=None, record=False, live=None):
         return np.r_[a, True] if station is not None else a
 
     for tick in range(int(s["duration_s"] * phys)):
+        clock.wait(tick)
         tsec = tick / phys
+        for t in delayed:
+            q = t["pending"]
+            while q and q[0][0] == tick:
+                _, i, sp = q.popleft()
+                g = t["g0"] + i
+                if t["drones"].alive[i] and not (failed[g] or mission.done[g]):
+                    t["drones"].set_setpoint(i, sp)
         if tick % kb == 0:
             for t in teams:
                 d = t["drones"]
@@ -145,7 +175,10 @@ def run(sc, world=None, record=False, live=None):
                     steps[g] += 1
                     if hasattr(b, "state_bytes"):
                         mem[g] = max(mem[g], int(b.state_bytes()))
-                    d.set_setpoint(i, act.setpoint)
+                    if t["lat"]:
+                        t["pending"].append((tick + t["lat"], i, act.setpoint))
+                    else:
+                        d.set_setpoint(i, act.setpoint)
                     radio.send(g, act.outbox)
             if station is not None:
                 act = station.step(Observation(tsec, {}, tuple(inbox[N])))

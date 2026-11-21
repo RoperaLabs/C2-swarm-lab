@@ -1,5 +1,5 @@
 """python -m c2lab <command>
-    run <scenario.toml> [--seed N] [--out DIR]          one run, saved with its replay; prints the metrics
+    run <scenario.toml> [--seed N] [--out DIR] [--realtime F]   one run, saved with its replay; prints the metrics
     sweep <scenario.toml> [--workers 5] [--out DIR]     every [sweep] variant x seed, resumable
     summarize <sweep dir> [--metric M ...] [--baseline V]  paired statistics -> summary.csv and summary.md
     progress <sweep dir> [--watch S]                    runs done per variant and their running means
@@ -26,6 +26,7 @@ r.add_argument("scenario")
 r.add_argument("--seed", type=int)
 r.add_argument("--out")
 r.add_argument("--live", action="store_true", help="rewrite the replay every few seconds while the run goes on")
+r.add_argument("--realtime", type=float, metavar="F", help="pace the run at F x real time (0.1 to 10)")
 s = sub.add_parser("sweep")
 s.add_argument("scenario")
 s.add_argument("--workers", type=int, default=5)
@@ -43,6 +44,7 @@ v.add_argument("--port", type=int, default=8770)
 a = ap.parse_args()
 
 if a.cmd == "run":
+    from c2lab.clock import RunClock
     from c2lab.record import save, save_replay
     from c2lab.sim import run
     sc = load(a.scenario)
@@ -53,7 +55,8 @@ if a.cmd == "run":
     if a.live:
         print(f"live: /viewer/?run=../{Path(out).as_posix()}/replay.json&live=1")
     t0 = time.perf_counter()
-    res = run(sc, record=True, live=(lambda part: save_replay(out, sc, part)) if a.live else None)
+    res = run(sc, record=True, live=(lambda part: save_replay(out, sc, part)) if a.live else None,
+              clock=RunClock("realtime", a.realtime) if a.realtime else None)
     wall = time.perf_counter() - t0
     out = save(out, sc, res)
     print(json.dumps(res["metrics"], indent=1))

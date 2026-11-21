@@ -3,7 +3,7 @@ import math
 import re
 import tomllib
 
-PHYSICS_HZ = 1200
+PHYSICS_HZ = 1200      # the one tick rate: physics models, autopilot loops and sensor periods are tuned to it
 BIOMES = {"mixto": [60, 40, 20], "urbano": [200, 200, 60], "bosque": [150, 150, 30], "interior": [40, 30, 8],
           "swarm_dil_v2": [200, 200, 50]}
 SENSORS = {"tof", "lidar", "depth", "detector", "pose", "imu", "gnss", "baro", "mag", "prior_map", "battery"}
@@ -101,7 +101,8 @@ def parse(text: str) -> dict:
 
     s = _table(raw["scenario"], "scenario", {"name", "seed", "duration_s", "mission", "rates_hz"})
     r = _table(s.get("rates_hz", {}), "scenario.rates_hz", {"physics", "brain", "radio", "record"})
-    phys = _get(r, "scenario.rates_hz", "physics", "int", PHYSICS_HZ, _pos, "debe ser > 0")
+    phys = _get(r, "scenario.rates_hz", "physics", "int", PHYSICS_HZ, lambda v: v == PHYSICS_HZ,
+                f"la física va a {PHYSICS_HZ} Hz fijos (modelos, autopiloto y sensores están ajustados a esa tasa)")
     rates = {"physics": phys}
     for k, dflt in (("brain", 10), ("radio", 10), ("record", 30)):
         rates[k] = _get(r, "scenario.rates_hz", k, "num", dflt, _pos, "debe ser > 0")
@@ -146,7 +147,8 @@ def parse(text: str) -> dict:
     for i, t in enumerate(teams):
         p = f"team[{i}]"
         _table(t, p, {"name", "count", "brain", "brain_params", "role", "drone", "memory_bytes", "sensors", "launch_s",
-                    "dynamics"})
+                    "dynamics", "command"})
+        cmd = _table(t.get("command", {}), f"{p}.command", {"latency_s"})
         name = _get(t, p, "name", "str", check=bool, why="no puede estar vacío")
         if name in names:
             _err(f"{p}.name", name, "nombre de equipo duplicado")
@@ -161,6 +163,8 @@ def parse(text: str) -> dict:
             "memory_bytes": _get(t, p, "memory_bytes", "int", None, lambda v: v >= 0, "debe ser >= 0"),
             "launch_s": _get(t, p, "launch_s", "num", 0.0, lambda v: v >= 0, "debe ser >= 0"),
             "sensors": _sensors(t.get("sensors", {}), f"{p}.sensors", phys),
+            "command": {"latency_s": _get(cmd, f"{p}.command", "latency_s", "num", 0.0, lambda v: v >= 0,
+                                          "debe ser >= 0")},     # actuation delay, round(latency_s * 1200) ticks
         })
 
     out = {"scenario": scen, "world": world, "radio": radio, "team": team}

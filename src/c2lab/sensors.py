@@ -8,10 +8,10 @@ import numpy as np
 from c2lab.brain import Reading
 from c2lab.physics.profiles import G
 from c2lab.physics.quad import quat_to_R
+from c2lab.scenario import PHYSICS_HZ
 from c2lab.seeds import rng as stream
 from c2lab.world.primitives import sphere_hits
 
-PHYSICS_HZ = 1200
 MOUNTS = {"front": (0, 0), "left": (90, 0), "back": (180, 0), "right": (-90, 0), "up": (0, 90), "down": (0, -90)}
 
 DEFAULTS = {

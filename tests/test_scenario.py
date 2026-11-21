@@ -36,7 +36,7 @@ def test_minimal_defaults():
                           "range_m": 100.0, "loss": 0.0, "dil": {}}
     assert s["team"][0] == {"name": "a", "count": 2, "brain": "brains.x:X", "brain_params": {}, "role": "nav",
                             "drone": "iris", "dynamics": "quad", "memory_bytes": None, "launch_s": 0.0,
-                            "sensors": {}}
+                            "sensors": {}, "command": {"latency_s": 0.0}}
     assert "ground_station" not in s
 
 
@@ -67,6 +67,9 @@ def _case(old, new, path, extra=""):
     _case('mission = "coverage"', 'mission = "coverage"\nrates_hz = { record = inf }', "scenario.rates_hz.record"),
     _case('mission = "coverage"', 'mission = "coverage"\nrates_hz = { brain = 2400 }', "scenario.rates_hz.brain"),
     _case('biome = "mixto"', 'biome = "mixto"\nsize_m = [60, 40, inf]', "world.size_m"),
+    _case('mission = "coverage"', 'mission = "coverage"\nrates_hz = { physics = 600 }', "scenario.rates_hz.physics",
+          "600"),
+    _case("count = 2", "count = 2\ncommand = { latency_s = -0.1 }", "team[0].command.latency_s"),
 ])
 def test_errors(text, path, extra):
     with pytest.raises(ScenarioError, match=path.replace("[", r"\[").replace("]", r"\]")) as e:
